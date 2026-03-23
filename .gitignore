@@ -1,0 +1,58 @@
+# =========================
+# 1. 敏感信息与环境变量
+# =========================
+.env
+.env.*
+*.pem
+*.key
+
+# =========================
+# 2. Python / FastAPI 后端相关
+# =========================
+# 虚拟环境
+venv/
+.venv/
+env/
+# 编译与缓存文件
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+# 日志与数据库
+*.log
+*.sqlite
+*.db
+
+# =========================
+# 3. Node.js / Vue3 前端相关
+# =========================
+# 依赖包 (绝对不能提交到 Git)
+node_modules/
+qa_frontend_system/node_modules/
+# 打包构建产物
+dist/
+dist-ssr/
+qa_frontend_system/dist/
+# npm/yarn/pnpm 错误日志
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# =========================
+# 4. 编辑器与操作系统相关
+# =========================
+# VS Code
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+.history/
+# JetBrains (PyCharm / WebStorm)
+.idea/
+# macOS & Windows
+.DS_Store
+Thumbs.db

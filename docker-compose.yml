@@ -1,0 +1,67 @@
+version: '3.8'
+
+services:
+  # ==========================================
+  # 1. MySQL 数据库 (用于存储会话、知识库信息)
+  # ==========================================
+  mysql:
+    image: mysql:8.0
+    container_name: qa_mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: root  # 设置数据库 root 密码
+      MYSQL_DATABASE: qa_system  # 启动时自动创建一个名为 qa_system 的库
+    ports:
+      - "3307:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql # 数据持久化，防止容器重启数据丢失
+
+  # ==========================================
+  # 2. Milvus 及其依赖 (etcd, minio)
+  # ==========================================
+  etcd:
+    container_name: milvus-etcd
+    image: quay.io/coreos/etcd:v3.5.5
+    environment:
+      - ETCD_AUTO_COMPACTION_MODE=revision
+      - ETCD_AUTO_COMPACTION_RETENTION=1000
+      - ETCD_QUOTA_BACKEND_BYTES=4294967296
+      - ETCD_SNAPSHOT_COUNT=50000
+    volumes:
+      - etcd_data:/etcd
+    command: etcd -advertise-client-urls=http://127.0.0.1:2379 -listen-client-urls http://0.0.0.0:2379 --data-dir /etcd
+
+  minio:
+    container_name: milvus-minio
+    image: minio/minio:RELEASE.2023-03-20T20-16-18Z
+    environment:
+      MINIO_ACCESS_KEY: minioadmin
+      MINIO_SECRET_KEY: minioadmin
+    ports:
+      - "9001:9001"
+      - "9000:9000"
+    volumes:
+      - minio_data:/minio_data
+    command: minio server /minio_data --console-address ":9001"
+
+  milvus:
+    container_name: milvus-standalone
+    image: milvusdb/milvus:v2.4.0
+    command: ["milvus", "run", "standalone"]
+    environment:
+      ETCD_ENDPOINTS: etcd:2379
+      MINIO_ADDRESS: minio:9000
+    volumes:
+      - milvus_data:/var/lib/milvus
+    ports:
+      - "19530:19530" # Milvus 核心服务端口 (Python 连这个)
+      - "9091:9091"   # Milvus 管理端口
+    depends_on:
+      - "etcd"
+      - "minio"
+
+# 声明上面用到的所有数据卷（挂载点）
+volumes:
+  mysql_data:
+  etcd_data:
+  minio_data:
+  milvus_data:

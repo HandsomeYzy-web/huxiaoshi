@@ -1,0 +1,20 @@
+fastapi>=0.111.0
+uvicorn>=0.30.0
+sqlalchemy>=2.0.30
+pymysql>=1.1.1
+pymilvus>=2.4.0
+
+# --- LangChain 核心与生态 ---
+langchain>=0.3.0
+langchain-core>=0.3.0
+langchain-community>=0.3.0   # 新增：用于支持各类第三方集成（如通义千问）
+langchain-milvus>=0.1.0
+langchain-openai>=0.2.0      # 保留：备用，方便随时切换回 OpenAI 兼容模式
+
+# --- 大模型底层 SDK ---
+dashscope>=1.20.0            # 新增：阿里云通义千问官方底层依赖
+
+# --- 基础工具库 ---
+python-dotenv>=1.0.1
+pydantic>=2.7.0
+requests>=2.32.0
