@@ -59,6 +59,19 @@ services:
       - "etcd"
       - "minio"
 
+# ==========================================
+  # 3. Milvus 可视化管理工具 (Attu)
+  # ==========================================
+  attu:
+    container_name: milvus-attu
+    image: zilliz/attu:v2.4.0  # 版本号尽量与你的 Milvus 保持大版本一致
+    environment:
+      MILVUS_URL: milvus:19530 # 让 Attu 在 Docker 内部直接连接 milvus 服务
+    ports:
+      - "8001:3000"            # 本地通过 8001 端口访问浏览器 GUI
+    depends_on:
+      - "milvus"
+
 # 声明上面用到的所有数据卷（挂载点）
 volumes:
   mysql_data:
