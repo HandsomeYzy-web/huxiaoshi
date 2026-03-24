@@ -16,6 +16,10 @@ export interface KnowledgeBaseItem {
   created_at: string
 }
 
+export interface UploadResponse {
+  uploaded_files: { doc_id: string; file_name: string }[]
+}
+
 // ===== 2. 知识库相关的 API 请求方法 =====
 
 /**
@@ -32,4 +36,27 @@ export function getKnowledgeBases() {
  */
 export function createKnowledgeBase(data: KBCreateForm) {
   return request.post<any, { kb_id: string }>('/api/v1/admin/kb/', data)
+}
+
+/**
+ * 3. 批量上传文档
+ * 将多个 File 追加到同一个 FormData 字段中
+ */
+export function uploadDocuments(kbId: string, files: File[]) {
+  const formData = new FormData()
+
+  files.forEach(file => {
+    formData.append('files', file)
+  })
+
+  return request.post<any, UploadResponse>(`/api/v1/admin/kb/${kbId}/upload`, formData, {
+    headers: { 'Content-Type': 'multipart/form-data' }
+  })
+}
+
+/**
+ * 触发文档解析与向量化后台任务
+ */
+export function processDocument(docId: string) {
+  return request.post<any, any>(`/api/v1/admin/kb/${docId}/process`)
 }

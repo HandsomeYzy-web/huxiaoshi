@@ -49,19 +49,65 @@
         </span>
       </template>
     </el-dialog>
+
+    <el-drawer v-model="uploadDrawerVisible" :title="`批量上传至：${currentKb?.name}`" size="450px" @close="clearUploadQueue">
+      <div class="upload-container">
+        <el-upload
+          drag
+          multiple
+          :auto-upload="false"
+          :on-change="handleFileChange"
+          :on-remove="handleFileRemove"
+          :file-list="fileList"
+          accept=".doc,.docx"
+        >
+          <el-icon class="el-icon--upload"><upload-filled /></el-icon>
+          <div class="el-upload__text">
+            将多个 Word 文档拖到此处，或 <em>点击多选</em>
+          </div>
+        </el-upload>
+
+        <div style="margin-top: 20px;">
+          <el-button
+            type="primary"
+            style="width: 100%"
+            :disabled="fileList.length === 0"
+            :loading="isUploading"
+            @click="submitBatchUpload"
+          >
+            {{ isUploading ? '正在上传并解析中...' : '确认开始批量上传' }}
+          </el-button>
+        </div>
+
+        <div v-if="uploadStatus" class="status-box" :class="uploadStatus.type">
+          {{ uploadStatus.text }}
+        </div>
+      </div>
+    </el-drawer>
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
-import { Plus } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
-import { getKnowledgeBases, createKnowledgeBase } from '../../../api/admin'
+import type { UploadFile, UploadFiles } from 'element-plus'
+import { Plus, UploadFilled } from '@element-plus/icons-vue'
+
+// 注意：这里引入的是 uploadDocuments (批量) 而不是 uploadDocument
+import { getKnowledgeBases, createKnowledgeBase, uploadDocuments, processDocument } from '../../../api/admin'
 import type { KnowledgeBaseItem, KBCreateForm } from '../../../api/admin'
 
 const loading = ref(false)
 const submitLoading = ref(false)
 const showCreateDialog = ref(false)
+
+const uploadDrawerVisible = ref(false)
+const currentKb = ref<KnowledgeBaseItem | null>(null)
+const uploadStatus = ref<{ type: 'success' | 'warning' | 'error', text: string } | null>(null)
+
+// 🌟 批量上传专属状态
+const fileList = ref<UploadFile[]>([])
+const isUploading = ref(false)
 
 // 真实的表格数据源
 const tableData = ref<KnowledgeBaseItem[]>([])
@@ -70,14 +116,13 @@ const tableData = ref<KnowledgeBaseItem[]>([])
 const kbForm = ref<KBCreateForm>({
   name: '',
   description: '',
-  embedding_model: 'e5-mistral-7b-instruct' // 锁定为你后端支持的模型
+  embedding_model: 'e5-mistral-7b-instruct'
 })
 
-// === 🌟 核心逻辑：获取列表 ===
+// === 核心逻辑：获取列表 ===
 const fetchKBList = async () => {
   try {
     loading.value = true
-    // 发起网络请求，直接拿到后端返回的 List 数据
     const res = await getKnowledgeBases()
     tableData.value = res
   } catch (error: any) {
@@ -87,7 +132,7 @@ const fetchKBList = async () => {
   }
 }
 
-// === 🌟 核心逻辑：提交创建 ===
+// === 核心逻辑：提交创建 ===
 const submitCreateKB = async () => {
   if (!kbForm.value.name) {
     ElMessage.warning('知识库名称不能为空')
@@ -96,11 +141,9 @@ const submitCreateKB = async () => {
 
   try {
     submitLoading.value = true
-    // 调用创建接口
     await createKnowledgeBase(kbForm.value)
     ElMessage.success('知识库创建成功！')
 
-    // 成功后关闭弹窗，清空表单，并重新拉取最新列表
     showCreateDialog.value = false
     kbForm.value.name = ''
     kbForm.value.description = ''
@@ -113,12 +156,61 @@ const submitCreateKB = async () => {
   }
 }
 
+// === 打开上传抽屉 ===
 const handleUpload = (row: KnowledgeBaseItem) => {
-  console.log('准备给这个知识库传文件：', row.name, 'ID:', row.id)
-  ElMessage.info(`后续将打开抽屉，上传至: ${row.name}`)
+  currentKb.value = row
+  clearUploadQueue()
+  uploadDrawerVisible.value = true
 }
 
-// 🌟 页面组件一挂载，立刻去请求数据
+// === 🌟 批量上传组件行为逻辑 ===
+const handleFileChange = (_uploadFile: UploadFile, uploadFiles: UploadFiles) => {
+  fileList.value = uploadFiles
+}
+
+const handleFileRemove = (_uploadFile: UploadFile, uploadFiles: UploadFiles) => {
+  fileList.value = uploadFiles
+}
+
+const clearUploadQueue = () => {
+  fileList.value = []
+  uploadStatus.value = null
+  isUploading.value = false
+}
+
+// === 🌟 核心逻辑：执行批量上传与解析 ===
+const submitBatchUpload = async () => {
+  if (!currentKb.value || fileList.value.length === 0) return
+
+  try {
+    isUploading.value = true
+    uploadStatus.value = { type: 'warning', text: '正在将文件传输至服务器...' }
+
+    // 1. 提取出原生的 File 对象数组
+    const rawFiles = fileList.value.map(item => item.raw as File)
+
+    // 2. 批量上传到 MySQL
+    const res = await uploadDocuments(currentKb.value.id, rawFiles)
+
+    uploadStatus.value = { type: 'warning', text: `成功上传 ${res.uploaded_files.length} 个文件！正在排队解析...` }
+
+    // 3. 循环触发后台的解析入库任务
+    for (const doc of res.uploaded_files) {
+      await processDocument(doc.doc_id)
+    }
+
+    uploadStatus.value = { type: 'success', text: '✅ 所有文件均已加入后台解析队列！请查看终端确认。' }
+
+    // 成功后清空待选列表，方便下次继续选
+    fileList.value = []
+
+  } catch (error: any) {
+    uploadStatus.value = { type: 'error', text: `❌ 失败: ${error.message}` }
+  } finally {
+    isUploading.value = false
+  }
+}
+
 onMounted(() => {
   fetchKBList()
 })
@@ -127,4 +219,9 @@ onMounted(() => {
 <style scoped>
 .toolbar-card { margin-bottom: 20px; border-radius: 8px; }
 .table-card { border-radius: 8px; }
+.upload-container { padding: 20px; text-align: center; }
+.status-box { margin-top: 20px; padding: 15px; border-radius: 4px; font-size: 14px; font-weight: bold; }
+.status-box.warning { background-color: #fdf6ec; color: #e6a23c; }
+.status-box.success { background-color: #f0f9eb; color: #67c23a; }
+.status-box.error { background-color: #fef0f0; color: #f56c6c; }
 </style>

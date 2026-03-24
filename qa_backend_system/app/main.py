@@ -126,4 +126,4 @@ if __name__ == "__main__":
     # 4. 启动主服务
     # 注意：这里我们去掉了 reload=True，因为在生产级或自定义启动脚本中，
     # reload 会引发多进程重启，导致多次检测端口和打印面板。
-    uvicorn.run("app.main:app", host=host, port=safe_port)
+    uvicorn.run("app.main:app", host=host, port=safe_port, reload=True)
