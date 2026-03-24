@@ -8,11 +8,15 @@ import uvicorn
 from rich.console import Console
 from rich.panel import Panel
 
-from app.api.v1 import chat
 from app.core.logger import log
 from app.models.schemas import success_resp, BaseResponse
-from app.api.v1 import chat, knowledge # 引入 knowledge
 from app.core.exceptions import register_exception_handlers
+from app.models.database import engine
+from app.models.entities import Base
+from .api.router import api_router
+
+Base.metadata.create_all(bind=engine)
+
 app = FastAPI(title="企业级智能问答系统 API", version="1.0.0")
 
 # 激活全局异常拦截
@@ -50,8 +54,7 @@ async def log_requests(request: Request, call_next):
     return response
 
 # 挂载路由
-app.include_router(chat.router, prefix="/api/v1/chat", tags=["智能问答模块"])
-app.include_router(knowledge.router, prefix="/api/v1/knowledge", tags=["知识库管理"]) # 挂载知识库路由
+app.include_router(api_router, prefix="/api/v1")
 
 @app.on_event("startup")
 async def startup_event():

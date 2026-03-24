@@ -1,16 +1,13 @@
 <template>
-  <router-view></router-view>
+  <router-view />
 </template>
 
 <style>
-/* 简单的全局样式重置 */
-body, html {
+/* 清除浏览器默认边距，让后台页面撑满全屏 */
+html, body, #app {
   margin: 0;
   padding: 0;
   height: 100%;
-  font-family: Arial, sans-serif;
-}
-#app {
-  height: 100vh;
+  width: 100%;
 }
 </style>

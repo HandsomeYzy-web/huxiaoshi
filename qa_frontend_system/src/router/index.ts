@@ -1,19 +1,30 @@
+// src/router/index.ts
 import { createRouter, createWebHistory } from 'vue-router'
 
 const router = createRouter({
-  history: createWebHistory(),
+  history: createWebHistory(import.meta.env.BASE_URL),
   routes: [
     {
       path: '/',
-      name: 'Chat',
-      // 修正：加上 user/ 目录
-      component: () => import('../views/user/ChatWindow.vue')
+      redirect: '/admin/kb' // 默认跳到管理端
     },
     {
       path: '/admin',
       name: 'Admin',
-      // 修正：指向你实际存在的 KbList.vue 作为后台默认页面
-      component: () => import('../views/admin/KbList.vue')
+      component: () => import('../views/admin/AdminLayout.vue'),
+      children: [
+        {
+          path: 'kb',
+          name: 'KbManage',
+          component: () => import('../views/admin/kb/KbManage.vue')
+        },
+        // 预留的数据库管理页面
+        // {
+        //   path: 'db',
+        //   name: 'DbManage',
+        //   component: () => import('../views/admin/db/DbManage.vue')
+        // }
+      ]
     }
   ]
 })
