@@ -24,11 +24,14 @@ const handleLoaded = (list: KnowledgeBase[]) => {
   display: grid;
   grid-template-columns: 360px minmax(0, 1fr);
   gap: 20px;
+  min-height: calc(100vh - 160px);
+  align-items: stretch;
 }
 
 .left-panel,
 .right-panel {
   min-width: 0;
+  min-height: 0;
 }
 
 @media (max-width: 1080px) {
@@ -37,3 +40,4 @@ const handleLoaded = (list: KnowledgeBase[]) => {
   }
 }
 </style>
+

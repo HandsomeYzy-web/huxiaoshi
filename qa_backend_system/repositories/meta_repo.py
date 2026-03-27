@@ -1,10 +1,10 @@
 from typing import Iterable, Optional
 
-from sqlalchemy import delete, select, update
+from sqlalchemy import delete, func, select, update
 from sqlalchemy.orm import Session
 
 from core.logger import logger
-from models.entities import DocumentChunk, KnowledgeBase, KnowledgeFile
+from models.entities import ChatMessage, ChatSession, DocumentChunk, KnowledgeBase, KnowledgeFile
 
 
 class MetaRepo:
@@ -29,6 +29,16 @@ class MetaRepo:
             select(KnowledgeBase)
             .where(KnowledgeBase.is_deleted.is_(False))
             .order_by(KnowledgeBase.created_at.desc())
+        )
+        return list(self.db.scalars(stmt).all())
+
+    def get_kbs_by_ids(self, kb_ids: Iterable[int]) -> list[KnowledgeBase]:
+        kb_ids = list(kb_ids)
+        if not kb_ids:
+            return []
+        stmt = select(KnowledgeBase).where(
+            KnowledgeBase.id.in_(kb_ids),
+            KnowledgeBase.is_deleted.is_(False),
         )
         return list(self.db.scalars(stmt).all())
 
@@ -65,6 +75,22 @@ class MetaRepo:
         )
         return list(self.db.scalars(stmt).all())
 
+    def get_files_by_kb_paginated(self, kb_id: int, page: int, page_size: int) -> tuple[list[KnowledgeFile], int]:
+        base_stmt = select(KnowledgeFile).where(
+            KnowledgeFile.kb_id == kb_id,
+            KnowledgeFile.is_deleted.is_(False),
+        )
+        total_stmt = select(func.count()).select_from(base_stmt.subquery())
+        total = int(self.db.scalar(total_stmt) or 0)
+
+        stmt = (
+            base_stmt
+            .order_by(KnowledgeFile.created_at.desc())
+            .offset((page - 1) * page_size)
+            .limit(page_size)
+        )
+        return list(self.db.scalars(stmt).all()), total
+
     def get_files_by_ids(self, file_ids: Iterable[int]) -> list[KnowledgeFile]:
         file_ids = list(file_ids)
         if not file_ids:
@@ -99,4 +125,46 @@ class MetaRepo:
         if not chunk_ids:
             return []
         stmt = select(DocumentChunk).where(DocumentChunk.id.in_(chunk_ids))
+        return list(self.db.scalars(stmt).all())
+
+    def create_chat_session(self, session: ChatSession) -> ChatSession:
+        self.db.add(session)
+        self.db.commit()
+        self.db.refresh(session)
+        return session
+
+    def list_chat_sessions(self, user_id: int) -> list[ChatSession]:
+        stmt = (
+            select(ChatSession)
+            .where(ChatSession.user_id == user_id, ChatSession.is_deleted.is_(False))
+            .order_by(ChatSession.updated_at.desc(), ChatSession.created_at.desc())
+        )
+        return list(self.db.scalars(stmt).all())
+
+    def get_chat_session(self, session_id: int, user_id: int) -> Optional[ChatSession]:
+        stmt = select(ChatSession).where(
+            ChatSession.id == session_id,
+            ChatSession.user_id == user_id,
+            ChatSession.is_deleted.is_(False),
+        )
+        return self.db.scalars(stmt).first()
+
+    def update_chat_session_title(self, session_id: int, title: str):
+        stmt = update(ChatSession).where(ChatSession.id == session_id).values(title=title)
+        self.db.execute(stmt)
+        self.db.commit()
+
+    def touch_chat_session(self, session_id: int):
+        stmt = update(ChatSession).where(ChatSession.id == session_id).values(updated_at=func.now())
+        self.db.execute(stmt)
+        self.db.commit()
+
+    def create_chat_message(self, message: ChatMessage) -> ChatMessage:
+        self.db.add(message)
+        self.db.commit()
+        self.db.refresh(message)
+        return message
+
+    def list_chat_messages(self, session_id: int) -> list[ChatMessage]:
+        stmt = select(ChatMessage).where(ChatMessage.session_id == session_id).order_by(ChatMessage.created_at.asc())
         return list(self.db.scalars(stmt).all())

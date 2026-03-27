@@ -1,13 +1,15 @@
 import request from '../utils/request'
 
 export interface QaAskPayload {
-  kb_id: number
+  kb_id?: number
+  kb_ids?: number[]
   question: string
-  top_k?: number
 }
 
 export interface CitationItem {
   chunk_id: number
+  kb_id: number
+  kb_name: string
   file_id: number
   file_name: string
   score: number
@@ -23,3 +25,6 @@ export interface QaAskResponse {
 
 export const askKnowledgeBase = (data: QaAskPayload) =>
   request.post<any, QaAskResponse>('/qa/ask', data)
+
+export const retrieveKnowledgeBase = (data: QaAskPayload) =>
+  request.post<any, QaAskResponse>('/qa/retrieve', data)

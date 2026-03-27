@@ -22,3 +22,11 @@ class FileResponse(BaseModel):
     updated_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class FilePageResponse(BaseModel):
+    items: list[FileResponse]
+    total: int
+    page: int
+    page_size: int
+    total_pages: int

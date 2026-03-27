@@ -3,6 +3,12 @@ import type { RouteRecordRaw } from 'vue-router'
 
 const routes: RouteRecordRaw[] = [
   {
+    path: '/chat',
+    name: 'Chat',
+    component: () => import('../views/chat/index.vue'),
+    meta: { title: '跨库聊天' }
+  },
+  {
     path: '/',
     component: () => import('../views/layout/index.vue'),
     redirect: '/workspace/overview',
@@ -29,13 +35,9 @@ const routes: RouteRecordRaw[] = [
         path: 'workspace/qa-test',
         name: 'WorkspaceQaTest',
         component: () => import('../views/workspace/qa-test.vue'),
-        meta: { title: '问答测试', section: 'qa-test' }
+        meta: { title: '召回测试', section: 'qa-test' }
       }
     ]
-  },
-  {
-    path: '/chat',
-    redirect: '/workspace/qa-test'
   }
 ]
 

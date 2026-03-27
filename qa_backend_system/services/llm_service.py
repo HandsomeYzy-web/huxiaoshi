@@ -1,11 +1,33 @@
-import requests
+from langchain_core.output_parsers import StrOutputParser
+from langchain_core.prompts import ChatPromptTemplate
+from langchain_openai import ChatOpenAI
 
 from core.config import settings
 
 
 class LLMService:
+    def __init__(self):
+        self.prompt = ChatPromptTemplate.from_messages(
+            [
+                (
+                    "system",
+                    (
+                        "你是知识库问答助手。请严格依据提供的检索内容回答问题。"
+                        "如果检索内容不足以支持结论，直接回答“根据当前知识库内容无法确定”。"
+                        "回答要准确、简洁，并尽量综合多个知识库的信息。"
+                    ),
+                ),
+                ("human", "问题：{question}\n\n检索内容：\n{context_block}"),
+            ]
+        )
+        self.output_parser = StrOutputParser()
+
     def generate_answer(self, question: str, contexts: list[str]) -> tuple[str, str | None]:
-        if not settings.LLM_BASE_URL or not settings.LLM_API_KEY or not settings.LLM_MODEL:
+        if (
+            not settings.EFFECTIVE_LLM_BASE_URL
+            or not settings.EFFECTIVE_LLM_API_KEY
+            or not settings.EFFECTIVE_LLM_MODEL
+        ):
             snippet = "\n\n".join(contexts[:3])
             return (
                 "未配置生成模型，当前返回检索到的高相关片段供前端展示。\n\n"
@@ -13,35 +35,18 @@ class LLMService:
                 None,
             )
 
-        api_url = f"{settings.LLM_BASE_URL.rstrip('/')}/chat/completions"
-        system_prompt = (
-            "你是知识库问答助手。请严格基于提供的上下文回答问题。"
-            "如果上下文不足以支持结论，直接回答“根据当前知识库内容无法确定”。"
+        model = ChatOpenAI(
+            base_url=settings.EFFECTIVE_LLM_BASE_URL.rstrip("/"),
+            api_key=settings.EFFECTIVE_LLM_API_KEY,
+            model=settings.EFFECTIVE_LLM_MODEL,
+            temperature=0.1,
         )
-        user_prompt = (
-            f"问题：{question}\n\n"
-            "上下文：\n"
-            + "\n\n".join(f"[片段 {index + 1}]\n{context}" for index, context in enumerate(contexts))
+        chain = self.prompt | model | self.output_parser
+        context_block = "\n\n".join(
+            f"[片段 {index + 1}]\n{context}" for index, context in enumerate(contexts)
         )
-        response = requests.post(
-            api_url,
-            headers={
-                "Authorization": f"Bearer {settings.LLM_API_KEY}",
-                "Content-Type": "application/json",
-            },
-            json={
-                "model": settings.LLM_MODEL,
-                "messages": [
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_prompt},
-                ],
-                "temperature": 0.1,
-            },
-            timeout=60,
-        )
-        response.raise_for_status()
-        data = response.json()
-        return data["choices"][0]["message"]["content"], settings.LLM_MODEL
+        answer = chain.invoke({"question": question, "context_block": context_block})
+        return answer, settings.EFFECTIVE_LLM_MODEL
 
 
 llm_service = LLMService()
