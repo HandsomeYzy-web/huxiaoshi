@@ -1,20 +1,16 @@
-from typing import List, Optional
+from typing import List, Optional, Any
 from fastapi import APIRouter, Depends, File, UploadFile, Form, HTTPException, Path
 from sqlalchemy.orm import Session
 
 from core.database import get_db
+from core.response import UnifiedResponse, success  # 👈 引入统一响应模型与快捷函数
 from models.schemas.file_schema import FileResponse, FileStrategyUpdate
 from services.file_service import file_service
 from repositories.meta_repo import MetaRepo
-from tasks.document_tasks import reprocess_document_task
 
 router = APIRouter(prefix="/file", tags=["Knowledge File"])
 
-
-# ==========================================
-# 1. 批量上传文件到知识库
-# ==========================================
-@router.post("/upload", summary="批量上传文件")
+@router.post("/upload", response_model=UnifiedResponse[List[dict]], summary="批量上传文件")
 async def upload_files(
         kb_id: int = Form(..., description="关联的知识库 ID"),
         files: List[UploadFile] = File(..., description="要上传的文件列表"),
@@ -30,7 +26,6 @@ async def upload_files(
     if not files:
         raise HTTPException(status_code=400, detail="请至少选择一个文件")
 
-    # 调用 Service 层执行防重校验、上传 MinIO 和写入 MySQL
     results = await file_service.batch_upload(
         db=db,
         kb_id=kb_id,
@@ -38,13 +33,11 @@ async def upload_files(
         custom_chunk_size=custom_chunk_size,
         custom_chunk_overlap=custom_chunk_overlap
     )
-    return {"message": "批量上传请求已处理", "data": results}
 
+    # 重点：使用 success 包裹返回数据
+    return success(data=results, message="批量上传请求已处理")
 
-# ==========================================
-# 2. 查询某知识库下的所有文件列表
-# ==========================================
-@router.get("/kb/{kb_id}", response_model=List[FileResponse], summary="获取知识库文件列表")
+@router.get("/kb/{kb_id}", response_model=UnifiedResponse[List[FileResponse]], summary="获取知识库文件列表")
 async def get_kb_files(
         kb_id: int = Path(..., description="知识库 ID"),
         db: Session = Depends(get_db)
@@ -56,13 +49,11 @@ async def get_kb_files(
     """
     repo = MetaRepo(db)
     files = repo.get_files_by_kb(kb_id)
-    return files
+
+    return success(data=files, message="获取知识库文件列表成功")
 
 
-# ==========================================
-# 3. 单独修改某一个文件的切分策略 (并触发重算)
-# ==========================================
-@router.put("/{file_id}/strategy", response_model=FileResponse, summary="修改单独文件的切分策略")
+@router.put("/{file_id}/strategy", response_model=UnifiedResponse[FileResponse], summary="修改单独文件的切分策略")
 async def update_file_strategy(
         strategy_in: FileStrategyUpdate,
         file_id: int = Path(..., description="文件 ID"),
@@ -81,16 +72,19 @@ async def update_file_strategy(
     if not file_entity:
         raise HTTPException(status_code=404, detail="文件不存在或已被删除")
 
-    # 更新策略
     file_entity.custom_chunk_size = strategy_in.custom_chunk_size
     file_entity.custom_chunk_overlap = strategy_in.custom_chunk_overlap
 
-    # 状态回退为 0 (待处理)，准备重新触发解析
     file_entity.status = 0
     file_entity.error_msg = None
 
+    # ----------------------------------------------------
+    # 触发 Celery 异步任务：清理 Milvus 旧数据并重新解析
+    from tasks.document_tasks import reprocess_document_task
     reprocess_document_task.delay(file_id)
+    # ----------------------------------------------------
 
     db.commit()
     db.refresh(file_entity)
-    return file_entity
+
+    return success(data=file_entity, message="文件切分策略已更新，正在后台重新解析")
