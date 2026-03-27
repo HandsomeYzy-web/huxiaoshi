@@ -42,9 +42,9 @@ class Settings(BaseSettings):
     MILVUS_HOST: str
     MILVUS_PORT: str
 
-    EMBEDDING_BASE_URL: str = "https://i.hunnu.edu.cn/ai/v1"
-    EMBEDDING_API_KEY: str = "qJ8TavbeAz4hA0uK"
-    EMBEDDING_MODEL: str = "e5-mistral-7b-instruct"
+    EMBEDDING_BASE_URL: str
+    EMBEDDING_API_KEY: str
+    EMBEDDING_MODEL: str
 
     LLM_BASE_URL: str = ""
     LLM_API_KEY: str = ""
