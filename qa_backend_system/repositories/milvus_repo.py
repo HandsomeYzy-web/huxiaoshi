@@ -91,6 +91,17 @@ class MilvusRepo:
         )
         return results[0] if results else []
 
+    def search_chunks_across_kbs(self, query_vector: list[float], top_k: int = 8) -> list[dict]:
+        self.ensure_collection()
+        self._load_collection()
+        results = self.client.search(
+            collection_name=self.collection_name,
+            data=[query_vector],
+            limit=top_k,
+            output_fields=["chunk_id", "kb_id", "file_id", "text"],
+        )
+        return results[0] if results else []
+
     def delete_chunks_by_file_id(self, file_id: int):
         self.ensure_collection()
         self._load_collection()

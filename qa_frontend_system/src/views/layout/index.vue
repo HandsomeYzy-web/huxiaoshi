@@ -5,7 +5,7 @@
         <div class="brand-mark">QA</div>
         <div>
           <div class="brand-title">管理工作台</div>
-          <div class="brand-subtitle">知识库与问答测试</div>
+          <div class="brand-subtitle">知识库、文件与召回验证</div>
         </div>
       </div>
 
@@ -27,18 +27,12 @@
           <span>{{ item.label }}</span>
         </el-menu-item>
       </el-menu>
-
-      <div class="aside-footer">
-        <div class="footer-label">扩展位</div>
-        <div class="footer-note">后续新增功能时，补路由和菜单配置即可接入。</div>
-      </div>
     </el-aside>
 
     <el-container class="workspace-main">
       <el-header class="workspace-header">
         <div>
           <div class="header-title">{{ currentTitle }}</div>
-          <div class="header-subtitle">前后端联调用于管理、处理与问答验证</div>
         </div>
       </el-header>
       <el-main class="workspace-content">
@@ -51,12 +45,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useRoute } from 'vue-router'
-import {
-  DataAnalysis,
-  FolderOpened,
-  Files,
-  ChatLineRound
-} from '@element-plus/icons-vue'
+import { DataAnalysis, FolderOpened, Files, ChatLineRound } from '@element-plus/icons-vue'
 
 const route = useRoute()
 
@@ -64,7 +53,7 @@ const navItems = [
   { path: '/workspace/overview', label: '工作台总览', icon: DataAnalysis },
   { path: '/workspace/knowledge-bases', label: '知识库管理', icon: FolderOpened },
   { path: '/workspace/files', label: '文件处理', icon: Files },
-  { path: '/workspace/qa-test', label: '问答测试', icon: ChatLineRound }
+  { path: '/workspace/qa-test', label: '召回测试', icon: ChatLineRound }
 ]
 
 const activePath = computed(() => route.path)
@@ -133,13 +122,6 @@ const currentTitle = computed(() => String(route.meta.title || '管理工作台'
 
 :deep(.workspace-menu-item.is-active) {
   background: linear-gradient(135deg, #f2d98d 0%, #e8f0cf 100%);
-}
-
-.aside-footer {
-  margin-top: auto;
-  padding: 16px;
-  border-radius: 18px;
-  background: rgba(255, 255, 255, 0.08);
 }
 
 .footer-label {

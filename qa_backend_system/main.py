@@ -3,7 +3,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from api.routers import file_router, kb_router, qa_router
+from api.routers import chat_router, file_router, kb_router, qa_router
 from core.config import settings
 from core.database import init_db
 from core.exceptions import register_exception_handlers
@@ -45,6 +45,7 @@ app.add_middleware(
 app.include_router(kb_router.router, prefix=settings.API_V1_STR)
 app.include_router(file_router.router, prefix=settings.API_V1_STR)
 app.include_router(qa_router.router, prefix=settings.API_V1_STR)
+app.include_router(chat_router.router, prefix=settings.API_V1_STR)
 
 
 @app.get("/health", tags=["System"])

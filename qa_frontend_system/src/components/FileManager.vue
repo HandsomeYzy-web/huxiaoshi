@@ -1,9 +1,9 @@
-<template>
+﻿<template>
   <section class="panel-card">
     <div class="panel-header">
       <div>
         <div class="panel-title">文件处理区</div>
-        <div class="panel-subtitle">上传文件、观察解析状态并按文件重设切分策略</div>
+        <div class="panel-subtitle">上传文件、观察解析状态，并按文件重设切分策略。</div>
       </div>
       <div class="header-actions">
         <el-tag v-if="kbId" type="success" effect="plain">当前知识库 ID {{ kbId }}</el-tag>
@@ -12,51 +12,67 @@
     </div>
 
     <div v-if="!kbId" class="empty-state">
-      <el-empty description="请先选择一个知识库，然后再管理文件与触发解析" />
+      <el-empty description="请先选择一个知识库，然后再管理文件与触发解析。" />
     </div>
 
     <template v-else>
       <div class="status-bar">
         <div class="status-group">
-          <span>文件总数 {{ fileList.length }}</span>
-          <span>已完成 {{ finishedCount }}</span>
-          <span>处理中 {{ processingCount }}</span>
+          <span>文件总数 {{ total }}</span>
+          <span>当前页 {{ fileList.length }}</span>
+          <span>本页已完成 {{ finishedCount }}</span>
+          <span>本页处理中 {{ processingCount }}</span>
         </div>
         <el-tag v-if="polling" type="warning" effect="plain">正在轮询解析状态</el-tag>
       </div>
 
-      <el-table :data="fileList" class="file-table" v-loading="loading">
-        <el-table-column prop="id" label="ID" width="80" />
-        <el-table-column prop="file_name" label="文件名" min-width="220" show-overflow-tooltip />
-        <el-table-column prop="file_type" label="类型" width="90" align="center">
-          <template #default="{ row }">
-            <el-tag size="small" effect="plain">{{ String(row.file_type || '-').toUpperCase() }}</el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column label="大小" width="110">
-          <template #default="{ row }">{{ formatFileSize(row.file_size) }}</template>
-        </el-table-column>
-        <el-table-column label="状态" width="140" align="center">
-          <template #default="{ row }">
-            <el-tag v-if="row.status === 0" type="info">待处理</el-tag>
-            <el-tag v-else-if="row.status === 1" type="warning">解析中</el-tag>
-            <el-tag v-else-if="row.status === 2" type="success">已完成</el-tag>
-            <el-tooltip v-else :content="row.error_msg || '解析失败'" placement="top">
-              <el-tag type="danger">失败</el-tag>
-            </el-tooltip>
-          </template>
-        </el-table-column>
-        <el-table-column label="切分策略" min-width="180">
-          <template #default="{ row }">
-            {{ row.custom_chunk_size || '默认' }} / {{ row.custom_chunk_overlap ?? '默认' }}
-          </template>
-        </el-table-column>
-        <el-table-column label="操作" width="140" fixed="right">
-          <template #default="{ row }">
-            <el-button text type="primary" @click="openStrategyDialog(row)">重新切分</el-button>
-          </template>
-        </el-table-column>
-      </el-table>
+      <div class="table-section">
+        <el-table :data="fileList" class="file-table" v-loading="loading">
+          <el-table-column prop="id" label="ID" width="80" />
+          <el-table-column prop="file_name" label="文件名" min-width="220" show-overflow-tooltip />
+          <el-table-column prop="file_type" label="类型" width="90" align="center">
+            <template #default="{ row }">
+              <el-tag size="small" effect="plain">{{ String(row.file_type || '-').toUpperCase() }}</el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column label="大小" width="110">
+            <template #default="{ row }">{{ formatFileSize(row.file_size) }}</template>
+          </el-table-column>
+          <el-table-column label="状态" width="140" align="center">
+            <template #default="{ row }">
+              <el-tag v-if="row.status === 0" type="info">待处理</el-tag>
+              <el-tag v-else-if="row.status === 1" type="warning">解析中</el-tag>
+              <el-tag v-else-if="row.status === 2" type="success">已完成</el-tag>
+              <el-tooltip v-else :content="row.error_msg || '解析失败'" placement="top">
+                <el-tag type="danger">失败</el-tag>
+              </el-tooltip>
+            </template>
+          </el-table-column>
+          <el-table-column label="切分策略" min-width="180">
+            <template #default="{ row }">
+              {{ row.custom_chunk_size || '默认' }} / {{ row.custom_chunk_overlap ?? '默认' }}
+            </template>
+          </el-table-column>
+          <el-table-column label="操作" width="140" fixed="right">
+            <template #default="{ row }">
+              <el-button text type="primary" @click="openStrategyDialog(row)">重新切分</el-button>
+            </template>
+          </el-table-column>
+        </el-table>
+
+        <div class="pagination-bar">
+          <el-pagination
+            background
+            layout="total, sizes, prev, pager, next"
+            :total="total"
+            :current-page="page"
+            :page-size="pageSize"
+            :page-sizes="[10, 20, 50, 100]"
+            @current-change="handlePageChange"
+            @size-change="handlePageSizeChange"
+          />
+        </div>
+      </div>
     </template>
 
     <el-dialog v-model="uploadDialogVisible" title="上传文件" width="560px" @close="closeUploadDialog">
@@ -132,6 +148,9 @@ const props = defineProps<{
 }>()
 
 const fileList = ref<KnowledgeFile[]>([])
+const total = ref(0)
+const page = ref(1)
+const pageSize = ref(10)
 const loading = ref(false)
 const polling = ref(false)
 const uploadDialogVisible = ref(false)
@@ -153,6 +172,29 @@ let timer: ReturnType<typeof setInterval> | null = null
 
 const processingCount = computed(() => fileList.value.filter(item => item.status === 0 || item.status === 1).length)
 const finishedCount = computed(() => fileList.value.filter(item => item.status === 2).length)
+
+const fetchFiles = async (showLoading = true) => {
+  if (!props.kbId) return
+  if (showLoading) loading.value = true
+
+  try {
+    const data = await getFilesByKnowledgeBase(props.kbId, {
+      page: page.value,
+      page_size: pageSize.value
+    })
+    fileList.value = data.items
+    total.value = data.total
+    if (data.items.some(item => item.status === 0 || item.status === 1)) {
+      startPolling()
+    } else {
+      stopPolling()
+    }
+  } catch (_error) {
+    stopPolling()
+  } finally {
+    if (showLoading) loading.value = false
+  }
+}
 
 const startPolling = () => {
   if (timer || !props.kbId) return
@@ -198,30 +240,13 @@ const buildUploadMessage = (results: UploadResult[]) => {
   }
 }
 
-const fetchFiles = async (showLoading = true) => {
-  if (!props.kbId) return
-  if (showLoading) loading.value = true
-
-  try {
-    const data = await getFilesByKnowledgeBase(props.kbId)
-    fileList.value = data
-    if (data.some(item => item.status === 0 || item.status === 1)) {
-      startPolling()
-    } else {
-      stopPolling()
-    }
-  } catch (_error) {
-    stopPolling()
-  } finally {
-    if (showLoading) loading.value = false
-  }
-}
-
 watch(
   () => props.kbId,
   newKbId => {
     stopPolling()
     fileList.value = []
+    total.value = 0
+    page.value = 1
     if (newKbId) {
       void fetchFiles(true)
     }
@@ -261,6 +286,7 @@ const handleUpload = async () => {
     const message = buildUploadMessage(results)
     ElMessage[message.type](message.text)
     closeUploadDialog()
+    page.value = 1
     await fetchFiles(true)
     startPolling()
   } finally {
@@ -293,6 +319,17 @@ const handleUpdateStrategy = async () => {
   }
 }
 
+const handlePageChange = (nextPage: number) => {
+  page.value = nextPage
+  void fetchFiles(true)
+}
+
+const handlePageSizeChange = (nextPageSize: number) => {
+  pageSize.value = nextPageSize
+  page.value = 1
+  void fetchFiles(true)
+}
+
 defineExpose({
   refresh: fetchFiles
 })
@@ -302,9 +339,10 @@ onUnmounted(stopPolling)
 
 <style scoped>
 .panel-card {
+  height: 100%;
   display: flex;
   flex-direction: column;
-  min-height: 560px;
+  min-height: 0;
   padding: 24px;
   border-radius: 24px;
   background: rgba(255, 255, 255, 0.92);
@@ -352,13 +390,29 @@ onUnmounted(stopPolling)
 
 .status-group {
   display: flex;
+  flex-wrap: wrap;
   gap: 16px;
   color: #5d7069;
   font-size: 13px;
 }
 
+.table-section {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
 .file-table {
   flex: 1;
+  min-height: 0;
+  height: 100%;
+}
+
+.pagination-bar {
+  display: flex;
+  justify-content: flex-end;
 }
 
 .upload-copy {
@@ -371,6 +425,11 @@ onUnmounted(stopPolling)
   .status-bar {
     flex-direction: column;
     align-items: flex-start;
+  }
+
+  .pagination-bar {
+    width: 100%;
+    overflow-x: auto;
   }
 }
 </style>

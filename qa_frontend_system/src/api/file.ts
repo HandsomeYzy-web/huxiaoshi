@@ -12,6 +12,14 @@ export interface KnowledgeFile {
   custom_chunk_overlap: number | null
 }
 
+export interface FilePageResponse {
+  items: KnowledgeFile[]
+  total: number
+  page: number
+  page_size: number
+  total_pages: number
+}
+
 export interface FileStrategyPayload {
   custom_chunk_size: number
   custom_chunk_overlap: number
@@ -24,8 +32,8 @@ export interface UploadResult {
   reason?: string
 }
 
-export const getFilesByKnowledgeBase = (kbId: number) =>
-  request.get<any, KnowledgeFile[]>(`/file/kb/${kbId}`)
+export const getFilesByKnowledgeBase = (kbId: number, params?: { page?: number; page_size?: number }) =>
+  request.get<any, FilePageResponse>(`/file/kb/${kbId}`, { params })
 
 export const uploadKnowledgeFiles = (formData: FormData) =>
   request.post<any, UploadResult[]>('/file/upload', formData, {

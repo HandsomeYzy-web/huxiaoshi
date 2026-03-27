@@ -50,6 +50,26 @@ class Settings(BaseSettings):
     LLM_API_KEY: str = ""
     LLM_MODEL: str = ""
 
+    DASHSCOPE_API_KEY: str = ""
+    DASHSCOPE_MODEL_NAME: str = ""
+    DASHSCOPE_BASE_URL: str = "https://dashscope.aliyuncs.com/compatible-mode/v1"
+    DEFAULT_RETRIEVAL_TOP_K: int = 5
+
+    @computed_field
+    @property
+    def EFFECTIVE_LLM_BASE_URL(self) -> str:
+        return self.LLM_BASE_URL or self.DASHSCOPE_BASE_URL
+
+    @computed_field
+    @property
+    def EFFECTIVE_LLM_API_KEY(self) -> str:
+        return self.LLM_API_KEY or self.DASHSCOPE_API_KEY
+
+    @computed_field
+    @property
+    def EFFECTIVE_LLM_MODEL(self) -> str:
+        return self.LLM_MODEL or self.DASHSCOPE_MODEL_NAME
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",
