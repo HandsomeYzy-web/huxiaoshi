@@ -12,6 +12,7 @@
     "@element-plus/icons-vue": "^2.3.2",
     "axios": "^1.13.6",
     "echarts": "^6.0.0",
+    "element-ai-vue": "^0.1.6",
     "element-plus": "^2.13.6",
     "markdown-it": "^14.1.1",
     "pinia": "^3.0.4",

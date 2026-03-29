@@ -13,7 +13,7 @@ router = APIRouter(prefix="/qa", tags=["QA"])
 async def ask_question(request: QAAskRequest, db: Session = Depends(get_db)):
     try:
         result = qa_service.ask(db, request)
-        return success(data=result, message="闂瓟鎴愬姛")
+        return success(data=result, message="")
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc))
 
@@ -22,7 +22,7 @@ async def ask_question(request: QAAskRequest, db: Session = Depends(get_db)):
 async def retrieve_chunks(request: QAAskRequest, db: Session = Depends(get_db)):
     try:
         result = qa_service.retrieve(db, request)
-        return success(data=result, message="鍙洖鎴愬姛")
+        return success(data=result, message="检索测试成功")
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc))
 
@@ -31,6 +31,6 @@ async def retrieve_chunks(request: QAAskRequest, db: Session = Depends(get_db)):
 async def chat_with_all_knowledge_bases(request: ChatAskRequest, db: Session = Depends(get_db)):
     try:
         result = qa_service.chat(db, request)
-        return success(data=result, message="璺ㄧ煡璇嗗簱闂瓟鎴愬姛")
+        return success(data=result, message="获取聊天对话成功")
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc))

@@ -14,7 +14,6 @@ from services.chat_service import chat_service
 
 router = APIRouter(prefix="/chat", tags=["Chat"])
 
-
 @router.get("/sessions", response_model=UnifiedResponse[list[ChatSessionSummary]], summary="List chat sessions")
 async def list_chat_sessions(db: Session = Depends(get_db)):
     return success(data=chat_service.list_sessions(db), message="获取聊天会话成功")
