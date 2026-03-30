@@ -48,6 +48,22 @@ export interface ChatMessageCreateResponse {
   involved_documents: ChatDocumentItem[]
 }
 
+// 流式响应事件类型
+export interface StreamEvent {
+  event: 'user_message' | 'session_info' | 'citations' | 'delta' | 'done' | 'error'
+  data: any
+}
+
+// 流式响应处理器
+export interface StreamHandlers {
+  onUserMessage?: (message: { id: number; content: string; created_at: string }) => void
+  onSessionInfo?: (session: { id: number; title: string; updated_at: string }) => void
+  onCitations?: (citations: ChatCitation[]) => void
+  onDelta?: (content: string) => void
+  onDone?: (message: { id: number; content: string; model_used: string | null; retrieved_count: number; created_at: string }) => void
+  onError?: (error: { message: string }) => void
+}
+
 export const listChatSessions = () =>
   request.get<any, ChatSessionSummary[]>('/chat/sessions')
 
@@ -59,3 +75,105 @@ export const getChatSessionDetail = (sessionId: number) =>
 
 export const appendChatMessage = (sessionId: number, question: string) =>
   request.post<any, ChatMessageCreateResponse>(`/chat/sessions/${sessionId}/messages`, { question })
+
+/**
+ * 流式发送消息
+ * @param sessionId 会话ID
+ * @param question 问题内容
+ * @param handlers 事件处理器
+ * @returns 返回 abort 函数用于取消请求
+ */
+export const appendChatMessageStream = (
+  sessionId: number,
+  question: string,
+  handlers: StreamHandlers
+): (() => void) => {
+  const abortController = new AbortController()
+
+  const fetchStream = async () => {
+    try {
+      const response = await fetch(`/api/v1/chat/sessions/${sessionId}/messages/stream`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'text/event-stream',
+        },
+        body: JSON.stringify({ question }),
+        signal: abortController.signal,
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ message: '请求失败' }))
+        handlers.onError?.({ message: errorData.detail || errorData.message || '请求失败' })
+        return
+      }
+
+      const reader = response.body?.getReader()
+      const decoder = new TextDecoder()
+
+      if (!reader) {
+        handlers.onError?.({ message: '无法读取响应流' })
+        return
+      }
+
+      let buffer = ''
+
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+
+        buffer += decoder.decode(value, { stream: true })
+
+        // 处理 SSE 格式的数据
+        const lines = buffer.split('\n')
+        buffer = lines.pop() || '' // 保留不完整的最后一行
+
+        let currentEvent: string | null = null
+
+        for (const line of lines) {
+          const trimmedLine = line.trim()
+          if (trimmedLine.startsWith('event:')) {
+            currentEvent = trimmedLine.slice(6).trim()
+          } else if (trimmedLine.startsWith('data:')) {
+            const dataStr = trimmedLine.slice(5).trim()
+            try {
+              const data = JSON.parse(dataStr)
+
+              switch (currentEvent) {
+                case 'user_message':
+                  handlers.onUserMessage?.(data)
+                  break
+                case 'session_info':
+                  handlers.onSessionInfo?.(data)
+                  break
+                case 'citations':
+                  handlers.onCitations?.(data)
+                  break
+                case 'delta':
+                  handlers.onDelta?.(data.content)
+                  break
+                case 'done':
+                  handlers.onDone?.(data)
+                  break
+                case 'error':
+                  handlers.onError?.(data)
+                  break
+              }
+            } catch (e) {
+              console.error('解析 SSE 数据失败:', e, dataStr)
+            }
+          }
+        }
+      }
+    } catch (error: any) {
+      if (error.name === 'AbortError') {
+        return // 用户取消，不视为错误
+      }
+      handlers.onError?.({ message: error.message || '网络请求失败' })
+    }
+  }
+
+  fetchStream()
+
+  return () => abortController.abort()
+}
