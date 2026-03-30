@@ -1,3 +1,4 @@
+from collections.abc import Generator
 from sqlalchemy.orm import Session
 
 from core.config import settings
@@ -80,6 +81,29 @@ class QAService:
             queried_kb_ids=list(kb_map.keys()),
             model_used=model_used,
         )
+
+    def stream_chat(self, db: Session, request: ChatAskRequest) -> Generator[tuple[str, bool, str | None, list[CitationItem]], None, None]:
+        """
+        流式聊天，生成器返回 (chunk, is_model_info, model_name, citations)
+        - is_model_info=True 时表示返回的是模型信息，不是内容
+        """
+        repo = MetaRepo(db)
+        knowledge_bases = repo.get_all_kbs()
+        if not knowledge_bases:
+            raise ValueError("No knowledge bases available")
+
+        kb_map = {kb.id: kb for kb in knowledge_bases}
+        top_k = request.top_k or settings.DEFAULT_RETRIEVAL_TOP_K
+        query_vector = self.embeddings.embed_query(request.question)
+        results = milvus_repo.search_chunks_across_kbs(query_vector, top_k=top_k)
+        citations, contexts = self._build_citations(repo, results, kb_map)
+
+        # 首先返回引用信息（一次性返回）
+        yield "", False, None, citations
+
+        # 然后流式返回答案
+        for chunk, is_model_info, model_name in llm_service.stream_answer(request.question, contexts):
+            yield chunk, is_model_info, model_name, []
 
     def _resolve_target_kb_ids(self, repo: MetaRepo, kb_id: int | None, kb_ids: list[int]) -> list[int]:
         normalized_ids = list(dict.fromkeys([*kb_ids, *([kb_id] if kb_id else [])]))

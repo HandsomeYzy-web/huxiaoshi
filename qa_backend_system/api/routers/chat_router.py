@@ -1,4 +1,7 @@
+import json
+
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
 from core.database import get_db
@@ -13,6 +16,7 @@ from models.schemas.chat_schema import (
 from services.chat_service import chat_service
 
 router = APIRouter(prefix="/chat", tags=["Chat"])
+
 
 @router.get("/sessions", response_model=UnifiedResponse[list[ChatSessionSummary]], summary="List chat sessions")
 async def list_chat_sessions(db: Session = Depends(get_db)):
@@ -40,5 +44,25 @@ async def get_chat_session(session_id: int, db: Session = Depends(get_db)):
 async def append_chat_message(session_id: int, request: ChatMessageCreateRequest, db: Session = Depends(get_db)):
     try:
         return success(data=chat_service.append_message(db, session_id, request), message="发送消息成功")
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+
+
+@router.post(
+    "/sessions/{session_id}/messages/stream",
+    summary="Append chat message with streaming response",
+)
+async def append_chat_message_stream(session_id: int, request: ChatMessageCreateRequest, db: Session = Depends(get_db)):
+    """流式聊天接口，使用 SSE 格式返回"""
+    try:
+        return StreamingResponse(
+            chat_service.stream_message(db, session_id, request),
+            media_type="text/event-stream",
+            headers={
+                "Cache-Control": "no-cache",
+                "Connection": "keep-alive",
+                "X-Accel-Buffering": "no",
+            },
+        )
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc))
