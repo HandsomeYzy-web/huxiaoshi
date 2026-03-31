@@ -10,6 +10,10 @@ class ChatSessionCreateRequest(BaseModel):
     title: str = Field(default="新对话", min_length=1, max_length=255)
 
 
+class ChatSessionRenameRequest(BaseModel):
+    title: str = Field(..., min_length=1, max_length=255)
+
+
 class ChatSessionSummary(BaseModel):
     id: int
     title: str
@@ -27,6 +31,10 @@ class ChatMessageResponse(BaseModel):
     model_used: Optional[str] = None
     retrieved_count: int = 0
     citations: List[CitationItem] = Field(default_factory=list)
+    # ── 三链路扩展 ───────────────────────────────────────────────
+    intent: Optional[str] = None  # casual_chat / data_query / doc_search
+    generated_sql: Optional[str] = None
+    sql_result_json: Optional[str] = None
     created_at: datetime
 
 

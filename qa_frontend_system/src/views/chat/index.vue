@@ -19,8 +19,28 @@
             :class="['session-item', { active: session.id === activeSessionId }]"
             @click="handleSelectSession({ key: session.id })"
           >
-            <div class="session-title">{{ session.title }}</div>
-            <div class="session-time">{{ formatTime(session.updated_at) }}</div>
+            <div class="session-info">
+              <div class="session-title">{{ session.title }}</div>
+              <div class="session-time">{{ formatTime(session.updated_at) }}</div>
+            </div>
+            <div class="session-actions" @click.stop>
+              <el-tooltip content="重命名" placement="top">
+                <el-button
+                  link
+                  size="small"
+                  class="action-btn"
+                  @click="handleRenameSession(session)"
+                >✏️</el-button>
+              </el-tooltip>
+              <el-tooltip content="删除" placement="top">
+                <el-button
+                  link
+                  size="small"
+                  class="action-btn action-delete"
+                  @click="handleDeleteSession(session.id)"
+                >🗑️</el-button>
+              </el-tooltip>
+            </div>
           </button>
         </div>
       </template>
@@ -59,13 +79,38 @@
                   <el-tag v-if="message.model_used" size="small" type="info" effect="plain">
                     {{ message.model_used }}
                   </el-tag>
+                  <el-tag v-if="message.intent" size="small" :type="intentTagType(message.intent)" effect="light">
+                    {{ intentLabel(message.intent) }}
+                  </el-tag>
                 </template>
                 <span class="message-time">{{ formatTime(message.created_at) }}</span>
               </div>
             </template>
 
-            <template v-if="message.role === 'assistant' && getMessageDocuments(message).length" #footer>
-              <div class="message-documents">
+            <template v-if="message.role === 'assistant'" #footer>
+              <div v-if="message.generated_sql" class="message-sql-block">
+                <div class="sql-title">📊 执行的 SQL</div>
+                <pre class="sql-code">{{ message.generated_sql }}</pre>
+                <div v-if="parseSqlResult(message.sql_result_json)" class="sql-result-table">
+                  <el-table
+                    :data="parseSqlResult(message.sql_result_json)!.rows"
+                    size="small"
+                    max-height="260"
+                    stripe
+                    border
+                  >
+                    <el-table-column
+                      v-for="col in parseSqlResult(message.sql_result_json)!.columns"
+                      :key="col"
+                      :prop="col"
+                      :label="col"
+                      min-width="120"
+                      show-overflow-tooltip
+                    />
+                  </el-table>
+                </div>
+              </div>
+              <div v-if="getMessageDocuments(message).length" class="message-documents">
                 <div class="documents-title">
                   <el-icon><Document /></el-icon>
                   涉及文档 ({{ getMessageDocuments(message).length }})
@@ -89,12 +134,12 @@
           </el-a-bubble>
 
           <el-a-bubble
-            v-if="streamingContent"
+            v-if="streamingContent || streamingStatus"
             :key="-1"
             placement="start"
-            :content="streamingContent"
+            :content="streamingContent || '...'"
             :is-markdown="true"
-            :typing="true"
+            :typing="!!streamingContent"
             shape="corner"
             class="message-bubble assistant streaming"
           >
@@ -104,7 +149,36 @@
             <template #header>
               <div class="message-header">
                 <span class="sender-name">湖小师</span>
-                <el-tag size="small" type="primary" effect="plain">生成中...</el-tag>
+                <el-tag v-if="streamingIntent" size="small" :type="intentTagType(streamingIntent)" effect="light">
+                  {{ intentLabel(streamingIntent) }}
+                </el-tag>
+                <el-tag v-if="streamingStatus" size="small" type="primary" effect="plain" class="status-tag">
+                  <span class="status-dot" /> {{ streamingStatus }}
+                </el-tag>
+              </div>
+            </template>
+            <template v-if="streamingSql" #footer>
+              <div class="message-sql-block">
+                <div class="sql-title">📊 执行的 SQL</div>
+                <pre class="sql-code">{{ streamingSql }}</pre>
+                <div v-if="streamingSqlResult" class="sql-result-table">
+                  <el-table
+                    :data="streamingSqlResult.rows"
+                    size="small"
+                    max-height="260"
+                    stripe
+                    border
+                  >
+                    <el-table-column
+                      v-for="col in streamingSqlResult.columns"
+                      :key="col"
+                      :prop="col"
+                      :label="col"
+                      min-width="120"
+                      show-overflow-tooltip
+                    />
+                  </el-table>
+                </div>
               </div>
             </template>
           </el-a-bubble>
@@ -143,10 +217,13 @@ import {
   createChatSession,
   getChatSessionDetail,
   listChatSessions,
+  deleteChatSession,
+  renameChatSession,
   type ChatCitation,
   type ChatDocumentItem,
   type ChatMessage,
-  type ChatSessionSummary
+  type ChatSessionSummary,
+  type SqlResultData,
 } from '../../api/chat'
 
 // ============ 类型定义 ============
@@ -164,7 +241,10 @@ const composerValue = ref('')
 const streaming = ref(false)
 const streamingContent = ref('')
 const streamingCitations = ref<ChatCitation[]>([])
-
+const streamingIntent = ref<string | null>(null)
+const streamingStatus = ref<string | null>(null)
+const streamingSql = ref<string | null>(null)
+const streamingSqlResult = ref<SqlResultData | null>(null)
 const messageContainerRef = ref<HTMLDivElement | null>(null)
 const bubbleListRef = ref<BubbleListInstance | null>(null)
 const abortStream = ref<(() => void) | null>(null)
@@ -202,6 +282,34 @@ const getMessageDocuments = (message: ChatMessage): ChatDocumentItem[] => {
     }
   }
   return [...map.values()]
+}
+
+// 意图相关辅助函数
+const intentLabel = (intent?: string | null): string => {
+  const map: Record<string, string> = {
+    casual_chat: '💬 闲聊',
+    data_query: '📊 查数据',
+    doc_search: '📄 查文档',
+  }
+  return map[intent || ''] || intent || ''
+}
+
+const intentTagType = (intent?: string | null): string => {
+  const map: Record<string, string> = {
+    casual_chat: 'info',
+    data_query: 'warning',
+    doc_search: 'success',
+  }
+  return map[intent || ''] || 'info'
+}
+
+const parseSqlResult = (jsonStr?: string | null): SqlResultData | null => {
+  if (!jsonStr) return null
+  try {
+    return JSON.parse(jsonStr)
+  } catch {
+    return null
+  }
 }
 
 const scrollToBottom = async () => {
@@ -260,6 +368,37 @@ const handleCreateSession = async () => {
   }
 }
 
+const handleDeleteSession = async (sessionId: number) => {
+  try {
+    await deleteChatSession(sessionId)
+    sessions.value = sessions.value.filter(s => s.id !== sessionId)
+    if (activeSessionId.value === sessionId) {
+      activeSessionId.value = sessions.value[0]?.id ?? null
+      if (activeSessionId.value) {
+        await loadSessionDetail(activeSessionId.value)
+      } else {
+        messages.value = []
+      }
+    }
+    ElMessage.success('会话已删除')
+  } catch {
+    ElMessage.error('删除失败')
+  }
+}
+
+const handleRenameSession = async (session: ChatSessionSummary) => {
+  const newTitle = window.prompt('请输入新的会话名称', session.title)
+  if (!newTitle || newTitle.trim() === session.title) return
+  try {
+    const updated = await renameChatSession(session.id, newTitle.trim())
+    const idx = sessions.value.findIndex(s => s.id === session.id)
+    if (idx !== -1) sessions.value[idx] = updated
+    ElMessage.success('重命名成功')
+  } catch {
+    ElMessage.error('重命名失败')
+  }
+}
+
 const handleSelectSession = async ({ key }: { key: number }) => {
   if (streaming.value) {
     ElMessage.warning('请等待当前回复完成')
@@ -311,6 +450,10 @@ const handleSend = async () => {
   streaming.value = true
   streamingContent.value = ''
   streamingCitations.value = []
+  streamingIntent.value = null
+  streamingStatus.value = null
+  streamingSql.value = null
+  streamingSqlResult.value = null
 
   // 调用流式 API
   abortStream.value = appendChatMessageStream(
@@ -343,8 +486,27 @@ const handleSend = async () => {
         ]
       },
 
+      onIntent: (data) => {
+        streamingIntent.value = data.intent
+      },
+
+      onStatus: (data) => {
+        streamingStatus.value = data.message
+        scrollToBottom()
+      },
+
       onCitations: (citations) => {
         streamingCitations.value = citations
+      },
+
+      onSql: (data) => {
+        streamingSql.value = data.sql
+        scrollToBottom()
+      },
+
+      onSqlResult: (data) => {
+        streamingSqlResult.value = data
+        scrollToBottom()
       },
 
       onDelta: (delta) => {
@@ -355,8 +517,7 @@ const handleSend = async () => {
       onDone: (assistantMsg) => {
         // 流式完成，添加完整助手消息
         streaming.value = false
-        streamingContent.value = ''
-        messages.value.push({
+        const finalMessage: ChatMessage = {
           id: assistantMsg.id,
           session_id: sessionId!,
           role: 'assistant',
@@ -364,9 +525,18 @@ const handleSend = async () => {
           model_used: assistantMsg.model_used,
           retrieved_count: assistantMsg.retrieved_count,
           citations: streamingCitations.value,
+          intent: assistantMsg.intent || streamingIntent.value,
+          generated_sql: streamingSql.value,
+          sql_result_json: streamingSqlResult.value ? JSON.stringify(streamingSqlResult.value) : null,
           created_at: assistantMsg.created_at
-        })
+        }
+        messages.value.push(finalMessage)
+        streamingContent.value = ''
         streamingCitations.value = []
+        streamingIntent.value = null
+        streamingStatus.value = null
+        streamingSql.value = null
+        streamingSqlResult.value = null
         scrollToBottom()
       },
 
@@ -374,6 +544,10 @@ const handleSend = async () => {
         streaming.value = false
         streamingContent.value = ''
         streamingCitations.value = []
+        streamingIntent.value = null
+        streamingStatus.value = null
+        streamingSql.value = null
+        streamingSqlResult.value = null
         ElMessage.error(error.message || '发送失败')
         // 移除临时用户消息
         messages.value = messages.value.filter(m => m.id !== tempUserMessage.id)
@@ -390,6 +564,10 @@ const handleStop = () => {
   streaming.value = false
   streamingContent.value = ''
   streamingCitations.value = []
+  streamingIntent.value = null
+  streamingStatus.value = null
+  streamingSql.value = null
+  streamingSqlResult.value = null
   ElMessage.info('已停止生成')
 }
 
@@ -630,6 +808,68 @@ watch(streamingContent, () => {
   margin-top: 8px;
   font-size: 11px;
   color: #67c23a;
+}
+
+/* ============ SQL 结果块 ============ */
+.message-sql-block {
+  margin-top: 12px;
+  padding: 12px;
+  background: #fafafa;
+  border-radius: 8px;
+  border: 1px solid #ebeef5;
+}
+
+.sql-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: #606266;
+  margin-bottom: 8px;
+}
+
+.sql-code {
+  background: #1e1e1e;
+  color: #d4d4d4;
+  padding: 12px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-family: 'Consolas', 'Monaco', monospace;
+  overflow-x: auto;
+  white-space: pre-wrap;
+  word-break: break-all;
+  margin: 0 0 8px 0;
+}
+
+.sql-result-table {
+  margin-top: 8px;
+}
+
+.sql-result-table :deep(.el-table) {
+  font-size: 12px;
+}
+
+/* ============ 状态标签动画 ============ */
+.status-tag {
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
+.status-dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #409eff;
+  margin-right: 4px;
+  animation: blink 1s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.7; }
+}
+
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
 }
 
 /* ============ 底部输入区 ============ */

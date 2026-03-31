@@ -10,10 +10,14 @@ class KnowledgeBase(Base):
     __tablename__ = "knowledge_base"
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True, comment="主键ID")
-    name: Mapped[str] = mapped_column(String(128), unique=True, nullable=False, comment="知识库名称")
+    user_id: Mapped[int] = mapped_column(BigInteger, nullable=False, index=True, comment="所属用户ID")
+    name: Mapped[str] = mapped_column(String(128), nullable=False, comment="知识库名称")
     description: Mapped[Optional[str]] = mapped_column(String(512), nullable=True, comment="知识库描述")
     default_chunk_size: Mapped[int] = mapped_column(Integer, default=1000, nullable=False, comment="默认文本块大小")
     default_chunk_overlap: Mapped[int] = mapped_column(Integer, default=200, nullable=False, comment="默认重叠大小")
+    retrieval_top_k: Mapped[int] = mapped_column(Integer, default=5, nullable=False, comment="检索返回条数")
+    retrieval_score_threshold: Mapped[float] = mapped_column(nullable=False, default=0.0, comment="检索最低相似度阈值")
+    enable_rerank: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False, comment="是否启用 Reranker")
 
     is_deleted: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False, comment="软删除标记")
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), nullable=False,

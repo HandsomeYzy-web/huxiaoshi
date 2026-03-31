@@ -1,12 +1,16 @@
 import hashlib
 import os
 from typing import List, Optional
-from fastapi import UploadFile, HTTPException
+from fastapi import UploadFile
 from sqlalchemy.orm import Session
 
+from core.config import settings
+from core.exceptions import ResourceNotFoundError, BusinessError
 from models.entities import KnowledgeFile
-from repositories.meta_repo import MetaRepo
+from repositories.kb_repo import KBRepo
+from repositories.file_repo import FileRepo
 from repositories.minio_repo import minio_repo
+from repositories.milvus_repo import milvus_repo
 from core.logger import logger
 from tasks.document_tasks import process_document_task
 
@@ -18,13 +22,9 @@ class FileService:
         计算上传文件的 MD5 哈希值
         采用分块读取的方式，防止超大文件撑爆内存
         """
-        md5_hash = hashlib.md5()
-        # 每次读取 8KB 块
+        md5_hash = hashlib.md5(usedforsecurity=False)
         while chunk := await file.read(8192):
             md5_hash.update(chunk)
-
-        # ⚠️ 非常重要：计算完 MD5 后，文件的读取游标已经到了末尾
-        # 必须将游标重置回开头，否则后续上传 MinIO 时会读到空文件
         await file.seek(0)
         return md5_hash.hexdigest()
 
@@ -33,26 +33,26 @@ class FileService:
             db: Session,
             kb_id: int,
             files: List[UploadFile],
+            user_id: int,
             custom_chunk_size: Optional[int] = None,
             custom_chunk_overlap: Optional[int] = None
     ) -> List[dict]:
         """
         处理批量文件上传
-        包含：防重校验 -> 上传 MinIO -> 写入 MySQL -> (未来触发异步解析任务)
+        包含：防重校验 -> 上传 MinIO -> 写入 MySQL -> 触发异步解析任务
         """
-        repo = MetaRepo(db)
+        kb_repo = KBRepo(db)
+        file_repo = FileRepo(db)
 
-        # 1. 校验知识库是否存在
-        kb = repo.get_kb_by_id(kb_id)
+        kb = kb_repo.get_kb_by_id(kb_id, user_id)
         if not kb:
-            raise HTTPException(status_code=404, detail=f"知识库 ID={kb_id} 不存在")
+            raise ResourceNotFoundError(f"知识库 ID={kb_id} 不存在或无权访问")
 
         results = []
         for file in files:
             try:
-                # 2. 计算 MD5 并进行防重校验
                 md5_str = await self.calculate_md5(file)
-                if repo.check_file_exists_by_md5(kb_id, md5_str):
+                if file_repo.check_file_exists_by_md5(kb_id, md5_str):
                     logger.info(f"文件已存在，跳过上传: {file.filename}")
                     results.append({
                         "filename": file.filename,
@@ -61,17 +61,13 @@ class FileService:
                     })
                     continue
 
-                # 3. 读取文件并提取基础信息
                 file_bytes = await file.read()
-                # 提取扩展名，例如 .pdf -> pdf
                 file_ext = os.path.splitext(file.filename)[1].lower().strip('.')
                 file_size = len(file_bytes)
 
-                # 4. 上传至 MinIO (按知识库ID和MD5隔离目录)
                 object_name = f"kb_{kb_id}/{md5_str}/{file.filename}"
                 minio_repo.upload_file_bytes(object_name, file_bytes, file.content_type)
 
-                # 5. 将文件元数据存入 MySQL
                 new_file = KnowledgeFile(
                     kb_id=kb_id,
                     file_name=file.filename,
@@ -80,12 +76,14 @@ class FileService:
                     md5=md5_str,
                     minio_bucket=minio_repo.bucket_name,
                     minio_object_name=object_name,
-                    status=0,  # 状态 0: 待处理
+                    status=0,
                     custom_chunk_size=custom_chunk_size,
                     custom_chunk_overlap=custom_chunk_overlap
                 )
-                repo.create_file(new_file)
+                file_repo.create_file(new_file)
 
+                # Bug 修复：先 commit 拿到 file_id，再触发 Celery 任务
+                # 避免 Celery 在 MySQL 提交前读取到空记录
                 process_document_task.delay(new_file.id)
 
                 logger.info(f"文件上传成功: {file.filename} (ID: {new_file.id})")
@@ -104,6 +102,29 @@ class FileService:
                 })
 
         return results
+
+    def delete_file(self, db: Session, file_id: int, user_id: int) -> None:
+        """
+        完整删除单个文件：
+        1. 删除 Milvus 中该文件所有向量
+        2. 删除 MinIO 中该文件对象
+        3. 软删除 MySQL 中 KnowledgeFile / DocumentChunk 记录
+        """
+        file_repo = FileRepo(db)
+        file_entity = file_repo.get_file_by_id(file_id)
+        if not file_entity:
+            raise ResourceNotFoundError(f"文件 ID={file_id} 不存在或已被删除")
+        # 校验该文件属于当前用户
+        kb = KBRepo(db).get_kb_by_id(file_entity.kb_id, user_id)
+        if not kb:
+            raise ResourceNotFoundError(f"文件 ID={file_id} 不存在或无权访问")
+
+        # 失败时 repo 层会抛 ExternalServiceError，由全局 handler 处理
+        milvus_repo.delete_chunks_by_file_id(file_id)
+        minio_repo.delete_file(file_entity.minio_object_name)
+
+        file_repo.delete_file(file_id)
+        logger.info(f"文件删除完成: file_id={file_id}, name={file_entity.file_name}")
 
 
 # 实例化单例

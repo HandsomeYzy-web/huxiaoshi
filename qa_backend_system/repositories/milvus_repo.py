@@ -1,6 +1,7 @@
 from pymilvus import Collection, CollectionSchema, DataType, FieldSchema, MilvusClient, utility
 
 from core.config import settings
+from core.exceptions import ExternalServiceError
 from core.logger import logger
 from core.milvus import DEFAULT_MILVUS_ALIAS, ensure_milvus_connection
 
@@ -11,7 +12,7 @@ class MilvusRepo:
     def __init__(self):
         self.alias = DEFAULT_MILVUS_ALIAS
         self.collection_name = "qa_knowledge_collection"
-        self.vector_dim = 4096
+        self.vector_dim = settings.MILVUS_VECTOR_DIM
         self.client = MilvusClient(uri=f"http://{settings.MILVUS_HOST}:{settings.MILVUS_PORT}")
 
     def ensure_collection(self):
@@ -103,10 +104,24 @@ class MilvusRepo:
         return results[0] if results else []
 
     def delete_chunks_by_file_id(self, file_id: int):
-        self.ensure_collection()
-        self._load_collection()
-        self.client.delete(self.collection_name, filter=f"file_id == {file_id}")
-        logger.info(f"Deleted Milvus vectors for file_id={file_id}")
+        try:
+            self.ensure_collection()
+            self._load_collection()
+            self.client.delete(self.collection_name, filter=f"file_id == {file_id}")
+            logger.info(f"Deleted Milvus vectors for file_id={file_id}")
+        except Exception as e:
+            logger.error(f"Milvus 删除失败 (file_id={file_id}): {e}")
+            raise ExternalServiceError(f"向量库删除失败: file_id={file_id}")
+
+    def delete_chunks_by_kb_id(self, kb_id: int):
+        try:
+            self.ensure_collection()
+            self._load_collection()
+            self.client.delete(self.collection_name, filter=f"kb_id == {kb_id}")
+            logger.info(f"Deleted Milvus vectors for kb_id={kb_id}")
+        except Exception as e:
+            logger.error(f"Milvus 删除失败 (kb_id={kb_id}): {e}")
+            raise ExternalServiceError(f"向量库删除失败: kb_id={kb_id}")
 
 
 milvus_repo = MilvusRepo()

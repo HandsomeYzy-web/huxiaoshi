@@ -14,7 +14,13 @@ const service: AxiosInstance = axios.create({
 })
 
 service.interceptors.request.use(
-  (config: InternalAxiosRequestConfig) => config,
+  (config: InternalAxiosRequestConfig) => {
+    const token = localStorage.getItem('qa_access_token')
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`
+    }
+    return config
+  },
   (error: unknown) => Promise.reject(error)
 )
 
@@ -28,6 +34,13 @@ service.interceptors.response.use(
     return payload.data
   },
   (error: any) => {
+    if (error?.response?.status === 401) {
+      localStorage.removeItem('qa_access_token')
+      if (window.location.pathname !== '/login') {
+        window.location.href = '/login'
+      }
+      return Promise.reject(error)
+    }
     const message =
       error?.response?.data?.message ||
       error?.message ||

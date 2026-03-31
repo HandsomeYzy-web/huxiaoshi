@@ -1,0 +1,89 @@
+from typing import Optional
+
+from sqlalchemy import func, select, update
+from sqlalchemy.orm import Session
+
+from core.logger import logger
+from models.entities import ChatMessage, ChatSession
+
+
+class ChatRepo:
+    """ChatSession 和 ChatMessage 持久化操作。"""
+
+    def __init__(self, db: Session):
+        self.db = db
+
+    # ── ChatSession 创建 ──────────────────────────────────────────────
+
+    def create_chat_session(self, session: ChatSession) -> ChatSession:
+        self.db.add(session)
+        self.db.commit()
+        self.db.refresh(session)
+        return session
+
+    # ── ChatSession 查询 ──────────────────────────────────────────────
+
+    def list_chat_sessions(self, user_id: int) -> list[ChatSession]:
+        stmt = (
+            select(ChatSession)
+            .where(ChatSession.user_id == user_id, ChatSession.is_deleted.is_(False))
+            .order_by(ChatSession.updated_at.desc(), ChatSession.created_at.desc())
+        )
+        return list(self.db.scalars(stmt).all())
+
+    def get_chat_session(self, session_id: int, user_id: int) -> Optional[ChatSession]:
+        stmt = select(ChatSession).where(
+            ChatSession.id == session_id,
+            ChatSession.user_id == user_id,
+            ChatSession.is_deleted.is_(False),
+        )
+        return self.db.scalars(stmt).first()
+
+    # ── ChatSession 更新 ──────────────────────────────────────────────
+
+    def update_chat_session_title(self, session_id: int, title: str):
+        stmt = update(ChatSession).where(ChatSession.id == session_id).values(title=title)
+        self.db.execute(stmt)
+        self.db.commit()
+
+    def touch_chat_session(self, session_id: int):
+        """更新会话的 updated_at 时间戳。"""
+        stmt = update(ChatSession).where(ChatSession.id == session_id).values(updated_at=func.now())
+        self.db.execute(stmt)
+        self.db.commit()
+
+    def rename_chat_session(self, session_id: int, user_id: int, title: str) -> Optional[ChatSession]:
+        session = self.get_chat_session(session_id, user_id)
+        if not session:
+            return None
+        session.title = title.strip()
+        self.db.commit()
+        self.db.refresh(session)
+        return session
+
+    # ── ChatSession 删除 ──────────────────────────────────────────────
+
+    def soft_delete_chat_session(self, session_id: int, user_id: int) -> bool:
+        session = self.get_chat_session(session_id, user_id)
+        if not session:
+            return False
+        session.is_deleted = True
+        self.db.commit()
+        logger.info(f"Soft deleted chat session: session_id={session_id}")
+        return True
+
+    # ── ChatMessage ───────────────────────────────────────────────────
+
+    def create_chat_message(self, message: ChatMessage) -> ChatMessage:
+        self.db.add(message)
+        self.db.commit()
+        self.db.refresh(message)
+        return message
+
+    def list_chat_messages(self, session_id: int) -> list[ChatMessage]:
+        stmt = (
+            select(ChatMessage)
+            .where(ChatMessage.session_id == session_id)
+            .order_by(ChatMessage.created_at.asc())
+        )
+        return list(self.db.scalars(stmt).all())

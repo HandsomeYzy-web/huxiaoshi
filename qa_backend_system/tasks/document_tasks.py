@@ -3,7 +3,8 @@ import traceback
 from tasks.celery_app import celery_app
 from core.database import SessionLocal
 from core.logger import logger
-from repositories.meta_repo import MetaRepo
+from repositories.file_repo import FileRepo
+from repositories.kb_repo import KBRepo
 from repositories.milvus_repo import milvus_repo
 from services.rag_service import rag_service
 
@@ -11,17 +12,20 @@ from services.rag_service import rag_service
 @celery_app.task(bind=True, name="process_document_task", max_retries=3)
 def process_document_task(self, file_id: int):
     db = SessionLocal()
-    repo = MetaRepo(db)
+    repo = FileRepo(db)
+    kb_repo = KBRepo(db)
 
     try:
         file_entity = repo.get_file_by_id(file_id)
         if not file_entity:
             logger.error(f"File not found, abort task: file_id={file_id}")
+            repo.update_file_status(file_id, status=3, error_msg="文件记录不存在")
             return
 
-        kb_entity = repo.get_kb_by_id(file_entity.kb_id)
+        kb_entity = kb_repo.get_kb_by_id(file_entity.kb_id)
         if not kb_entity:
             logger.error(f"Knowledge base not found, abort task: kb_id={file_entity.kb_id}")
+            repo.update_file_status(file_id, status=3, error_msg="关联的知识库不存在或已被删除")
             return
 
         repo.update_file_status(file_id, status=1)
@@ -38,14 +42,20 @@ def process_document_task(self, file_id: int):
 @celery_app.task(bind=True, name="reprocess_document_task")
 def reprocess_document_task(self, file_id: int):
     db = SessionLocal()
-    repo = MetaRepo(db)
+    repo = FileRepo(db)
+    kb_repo = KBRepo(db)
 
     try:
         file_entity = repo.get_file_by_id(file_id)
         if not file_entity:
             return
 
-        kb_entity = repo.get_kb_by_id(file_entity.kb_id)
+        kb_entity = kb_repo.get_kb_by_id(file_entity.kb_id)
+        if not kb_entity:
+            logger.error(f"Knowledge base not found, abort reprocess task: kb_id={file_entity.kb_id}")
+            repo.update_file_status(file_id, status=3, error_msg="关联的知识库不存在或已被删除")
+            return
+
         repo.update_file_status(file_id, status=1)
 
         repo.delete_chunks_by_file_id(file_id)
