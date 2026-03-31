@@ -53,9 +53,27 @@
               {{ row.custom_chunk_size || '默认' }} / {{ row.custom_chunk_overlap ?? '默认' }}
             </template>
           </el-table-column>
-          <el-table-column label="操作" width="140" fixed="right">
+          <el-table-column label="操作" width="200" fixed="right">
             <template #default="{ row }">
               <el-button text type="primary" @click="openStrategyDialog(row)">重新切分</el-button>
+              <el-button
+                v-if="row.status === 2"
+                text
+                type="success"
+                @click="openChunkPreview(row)"
+              >分段预览</el-button>
+              <el-popconfirm
+                title="确认删除该文件？将同时清除其所有向量数据，不可恢复！"
+                confirm-button-text="确认删除"
+                cancel-button-text="取消"
+                confirm-button-type="danger"
+                width="240"
+                @confirm="handleDeleteFile(row.id)"
+              >
+                <template #reference>
+                  <el-button text type="danger" :loading="deletingFileId === row.id">删除</el-button>
+                </template>
+              </el-popconfirm>
             </template>
           </el-table-column>
         </el-table>
@@ -129,6 +147,52 @@
         <el-button type="primary" :loading="updating" @click="handleUpdateStrategy">确认重算</el-button>
       </template>
     </el-dialog>
+
+    <!-- 分段预览 Dialog -->
+    <el-dialog
+      v-model="chunkPreviewVisible"
+      :title="`分段预览 — ${chunkPreviewFile?.file_name || ''}`"
+      width="760px"
+      destroy-on-close
+    >
+      <div class="chunk-stats">
+        <el-tag effect="plain">共 {{ chunkTotal }} 个分段</el-tag>
+        <el-tag effect="plain" type="info">当前页 {{ chunkPage }} / {{ chunkTotalPages }}</el-tag>
+      </div>
+
+      <div v-if="chunkLoading" class="chunk-loading">
+        <el-skeleton :rows="6" animated />
+      </div>
+
+      <div v-else-if="chunkList.length === 0" class="chunk-empty">
+        <el-empty description="该文件暂无分段数据" />
+      </div>
+
+      <div v-else class="chunk-list">
+        <div
+          v-for="chunk in chunkList"
+          :key="chunk.id"
+          class="chunk-item"
+        >
+          <div class="chunk-header">
+            <span class="chunk-index"># {{ chunk.chunk_index + 1 }}</span>
+            <el-tag size="small" type="info" effect="plain">{{ chunk.char_count }} 字</el-tag>
+          </div>
+          <div class="chunk-content">{{ chunk.content }}</div>
+        </div>
+      </div>
+
+      <div class="chunk-pagination">
+        <el-pagination
+          background
+          layout="prev, pager, next"
+          :total="chunkTotal"
+          :current-page="chunkPage"
+          :page-size="chunkPageSize"
+          @current-change="handleChunkPageChange"
+        />
+      </div>
+    </el-dialog>
   </section>
 </template>
 
@@ -136,9 +200,12 @@
 import { computed, onUnmounted, reactive, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import {
+  deleteFile,
+  getFileChunks,
   getFilesByKnowledgeBase,
   updateFileStrategy,
   uploadKnowledgeFiles,
+  type ChunkItem,
   type KnowledgeFile,
   type UploadResult
 } from '../api/file'
@@ -159,6 +226,17 @@ const uploading = ref(false)
 const updating = ref(false)
 const currentFile = ref<KnowledgeFile | null>(null)
 const tempFiles = ref<any[]>([])
+const deletingFileId = ref<number | null>(null)
+
+// --- 分段预览 ---
+const chunkPreviewVisible = ref(false)
+const chunkPreviewFile = ref<KnowledgeFile | null>(null)
+const chunkList = ref<ChunkItem[]>([])
+const chunkTotal = ref(0)
+const chunkPage = ref(1)
+const chunkPageSize = ref(20)
+const chunkTotalPages = ref(0)
+const chunkLoading = ref(false)
 const uploadForm = reactive<{ custom_chunk_size?: number; custom_chunk_overlap?: number }>({
   custom_chunk_size: undefined,
   custom_chunk_overlap: undefined
@@ -319,6 +397,46 @@ const handleUpdateStrategy = async () => {
   }
 }
 
+const handleDeleteFile = async (fileId: number) => {
+  deletingFileId.value = fileId
+  try {
+    await deleteFile(fileId)
+    ElMessage.success('文件已删除')
+    await fetchFiles(true)
+  } finally {
+    deletingFileId.value = null
+  }
+}
+
+const openChunkPreview = async (file: KnowledgeFile) => {
+  chunkPreviewFile.value = file
+  chunkPage.value = 1
+  chunkList.value = []
+  chunkPreviewVisible.value = true
+  await fetchChunks()
+}
+
+const fetchChunks = async () => {
+  if (!chunkPreviewFile.value) return
+  chunkLoading.value = true
+  try {
+    const data = await getFileChunks(chunkPreviewFile.value.id, {
+      page: chunkPage.value,
+      page_size: chunkPageSize.value
+    })
+    chunkList.value = data.items
+    chunkTotal.value = data.total
+    chunkTotalPages.value = data.total_pages
+  } finally {
+    chunkLoading.value = false
+  }
+}
+
+const handleChunkPageChange = (nextPage: number) => {
+  chunkPage.value = nextPage
+  void fetchChunks()
+}
+
 const handlePageChange = (nextPage: number) => {
   page.value = nextPage
   void fetchFiles(true)
@@ -418,6 +536,64 @@ onUnmounted(stopPolling)
 .upload-copy {
   padding: 24px 0;
   color: #5d7069;
+}
+
+/* 分段预览样式 */
+.chunk-stats {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.chunk-loading {
+  padding: 12px 0;
+}
+
+.chunk-empty {
+  padding: 24px 0;
+}
+
+.chunk-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-height: 520px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.chunk-item {
+  border: 1px solid #e5ece6;
+  border-radius: 12px;
+  padding: 14px 16px;
+  background: #f8faf7;
+}
+
+.chunk-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.chunk-index {
+  font-size: 13px;
+  font-weight: 700;
+  color: #2b6150;
+}
+
+.chunk-content {
+  font-size: 13px;
+  line-height: 1.7;
+  color: #3a4f47;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.chunk-pagination {
+  display: flex;
+  justify-content: center;
+  margin-top: 16px;
 }
 
 @media (max-width: 900px) {

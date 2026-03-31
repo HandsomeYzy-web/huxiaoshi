@@ -36,7 +36,7 @@ def setup_logger():
         encoding="utf-8",
         enqueue=True,
         backtrace=True,        # 记录完整的异常堆栈
-        diagnose=True          # 诊断报错时的变量值 (生产环境视敏感度可关闭)
+        diagnose=False          # 关闭变量诊断，防止敏感数据泄露到日志
     )
 
 # 在 main.py 启动时调用 setup_logger() 即可

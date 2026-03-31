@@ -2,6 +2,7 @@ import io
 from minio import Minio
 from datetime import timedelta
 from core.config import settings
+from core.exceptions import ExternalServiceError
 from core.logger import logger
 
 class MinioRepo:
@@ -51,5 +52,25 @@ class MinioRepo:
             object_name,
             expires=timedelta(hours=expires_hours)
         )
+
+    def delete_file(self, object_name: str):
+        """从 MinIO 删除一个对象"""
+        try:
+            self.client.remove_object(self.bucket_name, object_name)
+            logger.debug(f"MinIO 文件已删除: {object_name}")
+        except Exception as e:
+            logger.error(f"MinIO 删除文件失败 [{object_name}]: {e}")
+            raise ExternalServiceError(f"对象存储删除失败: {object_name}")
+
+    def delete_files_with_prefix(self, prefix: str):
+        """删除指定前缀下的所有对象（用于删除整个知识库目录）"""
+        try:
+            objects = self.client.list_objects(self.bucket_name, prefix=prefix, recursive=True)
+            for obj in objects:
+                self.client.remove_object(self.bucket_name, obj.object_name)
+            logger.info(f"MinIO 前缀 '{prefix}' 下所有文件已删除")
+        except Exception as e:
+            logger.error(f"MinIO 批量删除失败 [prefix={prefix}]: {e}")
+            raise ExternalServiceError(f"对象存储批量删除失败: {prefix}")
 
 minio_repo = MinioRepo() # 实例化单例

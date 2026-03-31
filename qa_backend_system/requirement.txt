@@ -31,7 +31,12 @@ dashscope>=1.20.0
 # ==========================================
 python-dotenv>=1.0.1         # 读取 .env 环境变量文件
 pydantic>=2.7.0              # 数据格式验证 (FastAPI 核心依赖)
+pydantic-settings>=2.0.0     # 从 .env 加载配置
+email-validator>=2.1.0       # Pydantic EmailStr 支持
+python-jose[cryptography]>=3.3.0  # JWT 生成与验证
+bcrypt>=4.0.0                # 密码哈希
 requests>=2.32.0             # 发送 HTTP 请求
+httpx>=0.27.0                # 异步 HTTP 客户端 (Reranker / TestClient)
 loguru>=0.7.2                # 日志系统
 rich>=13.7.1                 # 终端美化与彩色横幅打印
 
@@ -55,3 +60,10 @@ celery>=5.3.0                # 推荐：处理耗时的文档解析与向量化�
 # ==========================================
 pdf2image>=1.17.0            # 配合 unstructured 处理 PDF 图像提取
 pillow>=10.2.0               # 图像处理基础库
+pytesseract>=0.3.10          # Tesseract OCR Python 绑定（需安装 tesseract-ocr 系统包）
+
+# ==========================================
+# 9. 测试框架
+# ==========================================
+pytest>=8.0.0
+pytest-asyncio>=0.23.0

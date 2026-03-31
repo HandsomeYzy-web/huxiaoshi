@@ -18,6 +18,9 @@ export interface ChatMessage {
   model_used?: string | null
   retrieved_count?: number
   citations?: ChatCitation[]
+  intent?: string | null
+  generated_sql?: string | null
+  sql_result_json?: string | null
   created_at: string
 }
 
@@ -50,17 +53,40 @@ export interface ChatMessageCreateResponse {
 
 // 流式响应事件类型
 export interface StreamEvent {
-  event: 'user_message' | 'session_info' | 'citations' | 'delta' | 'done' | 'error'
+  event: 'user_message' | 'session_info' | 'intent' | 'status' | 'citations' | 'sql' | 'sql_result' | 'delta' | 'done' | 'error'
   data: any
+}
+
+// 意图分类数据
+export interface IntentData {
+  intent: 'casual_chat' | 'data_query' | 'doc_search'
+  confidence: number
+  reason: string
+}
+
+// 状态步骤数据
+export interface StatusData {
+  step: string
+  message: string
+}
+
+// SQL 查询结果数据
+export interface SqlResultData {
+  columns: string[]
+  rows: Record<string, any>[]
 }
 
 // 流式响应处理器
 export interface StreamHandlers {
   onUserMessage?: (message: { id: number; content: string; created_at: string }) => void
   onSessionInfo?: (session: { id: number; title: string; updated_at: string }) => void
+  onIntent?: (data: IntentData) => void
+  onStatus?: (data: StatusData) => void
   onCitations?: (citations: ChatCitation[]) => void
+  onSql?: (data: { sql: string }) => void
+  onSqlResult?: (data: SqlResultData) => void
   onDelta?: (content: string) => void
-  onDone?: (message: { id: number; content: string; model_used: string | null; retrieved_count: number; created_at: string }) => void
+  onDone?: (message: { id: number; content: string; model_used: string | null; retrieved_count: number; intent: string; created_at: string }) => void
   onError?: (error: { message: string }) => void
 }
 
@@ -92,11 +118,13 @@ export const appendChatMessageStream = (
 
   const fetchStream = async () => {
     try {
+      const token = localStorage.getItem('qa_access_token')
       const response = await fetch(`/api/v1/chat/sessions/${sessionId}/messages/stream`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Accept': 'text/event-stream',
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
         },
         body: JSON.stringify({ question }),
         signal: abortController.signal,
@@ -146,8 +174,20 @@ export const appendChatMessageStream = (
                 case 'session_info':
                   handlers.onSessionInfo?.(data)
                   break
+                case 'intent':
+                  handlers.onIntent?.(data)
+                  break
+                case 'status':
+                  handlers.onStatus?.(data)
+                  break
                 case 'citations':
                   handlers.onCitations?.(data)
+                  break
+                case 'sql':
+                  handlers.onSql?.(data)
+                  break
+                case 'sql_result':
+                  handlers.onSqlResult?.(data)
                   break
                 case 'delta':
                   handlers.onDelta?.(data.content)
@@ -177,3 +217,9 @@ export const appendChatMessageStream = (
 
   return () => abortController.abort()
 }
+
+export const deleteChatSession = (sessionId: number) =>
+  request.delete<any, null>(`/chat/sessions/${sessionId}`)
+
+export const renameChatSession = (sessionId: number, title: string) =>
+  request.patch<any, ChatSessionSummary>(`/chat/sessions/${sessionId}`, { title })

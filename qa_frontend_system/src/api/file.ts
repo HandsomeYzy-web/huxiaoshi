@@ -32,6 +32,24 @@ export interface UploadResult {
   reason?: string
 }
 
+export interface ChunkItem {
+  id: number
+  kb_id: number
+  file_id: number
+  chunk_index: number
+  content: string
+  char_count: number
+  created_at: string
+}
+
+export interface ChunkPageResponse {
+  items: ChunkItem[]
+  total: number
+  page: number
+  page_size: number
+  total_pages: number
+}
+
 export const getFilesByKnowledgeBase = (kbId: number, params?: { page?: number; page_size?: number }) =>
   request.get<any, FilePageResponse>(`/file/kb/${kbId}`, { params })
 
@@ -42,3 +60,9 @@ export const uploadKnowledgeFiles = (formData: FormData) =>
 
 export const updateFileStrategy = (fileId: number, data: FileStrategyPayload) =>
   request.put<any, KnowledgeFile>(`/file/${fileId}/strategy`, data)
+
+export const deleteFile = (fileId: number) =>
+  request.delete<any, null>(`/file/${fileId}`)
+
+export const getFileChunks = (fileId: number, params?: { page?: number; page_size?: number }) =>
+  request.get<any, ChunkPageResponse>(`/file/${fileId}/chunks`, { params })
