@@ -9,6 +9,9 @@ from core.config import settings
 from core.database import init_db, get_db
 from core.exceptions import register_exception_handlers
 from core.logger import logger, setup_logger
+from repositories.minio_repo import minio_repo
+from repositories.milvus_repo import milvus_repo
+from repositories.redis_repo import redis_repo
 
 
 @asynccontextmanager
@@ -17,9 +20,9 @@ async def lifespan(app: FastAPI):
     logger.info(f"Starting {settings.PROJECT_NAME}")
     init_db()
 
-    from repositories.minio_repo import minio_repo  # noqa: F401
-    from repositories.milvus_repo import milvus_repo  # noqa: F401
-    from repositories.redis_repo import redis_repo  # noqa: F401
+    minio_repo.init()
+    milvus_repo.init()
+    redis_repo.init()
 
     # 初始化权限系统（同步默认角色和权限）
     from services.role_service import role_service
