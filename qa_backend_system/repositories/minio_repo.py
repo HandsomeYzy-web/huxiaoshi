@@ -16,6 +16,9 @@ class MinioRepo:
             secure=settings.MINIO_SECURE
         )
         self.bucket_name = settings.MINIO_BUCKET_NAME
+
+    def init(self):
+        """启动时显式初始化：确保 Bucket 存在。"""
         self._ensure_bucket_exists()
 
     def _ensure_bucket_exists(self):
