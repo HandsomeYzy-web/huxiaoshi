@@ -2,7 +2,7 @@
 name = "qa-backend-system"
 version = "1.0.0"
 description = "QA Backend System"
-requires-python = ">=3.11"
+requires-python = ">=3.12"
 dependencies = [
     # ==========================================
     # 1. 核心 Web 框架与服务器
@@ -89,7 +89,7 @@ package = false
 # Ruff 代码风格与 Lint 配置
 # ==========================================
 [tool.ruff]
-target-version = "py311"
+target-version = "py312"
 line-length = 100
 exclude = [
     ".git",
@@ -106,7 +106,7 @@ select = ["E", "W", "F", "I", "B", "C4", "UP", "SIM"]
 ignore = [
     "E501",   # line too long — handled by formatter
     "B008",   # do not perform function calls in argument defaults (FastAPI 依赖注入)
-    "UP007",  # Use X | Y for union type (保持 Python 3.9 兼容写法)
+    "UP007",  # Use X | Y for union type (保持与旧代码注解兼容)
 ]
 
 [tool.ruff.lint.isort]
@@ -121,7 +121,7 @@ docstring-code-format = true
 # Mypy 静态类型检查配置
 # ==========================================
 [tool.mypy]
-python_version = "3.11"
+python_version = "3.12"
 warn_return_any = true
 warn_unused_configs = true
 warn_unused_ignores = true
