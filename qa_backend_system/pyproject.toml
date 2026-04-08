@@ -1,0 +1,163 @@
+[project]
+name = "qa-backend-system"
+version = "1.0.0"
+description = "QA Backend System"
+requires-python = ">=3.11"
+dependencies = [
+    # ==========================================
+    # 1. 核心 Web 框架与服务器
+    # ==========================================
+    "fastapi>=0.111.0",
+    "uvicorn>=0.30.0",
+    "python-multipart>=0.0.9",
+
+    # ==========================================
+    # 2. 数据库驱动与 ORM
+    # ==========================================
+    "sqlalchemy>=2.0.30",
+    "pymysql>=1.1.1",
+    "pymilvus>=2.4.0",
+
+    # ==========================================
+    # 3. 大模型与 AI 编排 (LangChain 生态)
+    # ==========================================
+    "langchain>=0.3.0",
+    "langchain-core>=0.3.0",
+    "langchain-community>=0.3.0",
+    "langchain-milvus>=0.1.0",
+    "langchain-openai>=0.2.0",
+
+    # ==========================================
+    # 4. 阿里云通义千问官方 SDK
+    # ==========================================
+    "dashscope>=1.20.0",
+
+    # ==========================================
+    # 5. 基础工具与企业级基建
+    # ==========================================
+    "python-dotenv>=1.0.1",
+    "pydantic>=2.7.0",
+    "pydantic-settings>=2.0.0",
+    "email-validator>=2.1.0",
+    "python-jose[cryptography]>=3.3.0",
+    "bcrypt>=4.0.0",
+    "requests>=2.32.0",
+    "httpx>=0.27.0",
+    "loguru>=0.7.2",
+    "rich>=13.7.1",
+
+    # ==========================================
+    # 6. 新架构核心依赖 (Agent & 数据处理)
+    # ==========================================
+    "langgraph>=0.0.30",
+    "unstructured[all-docs]>=0.13.0",
+    "cryptography>=42.0.0",
+    "tiktoken>=0.6.0",
+
+    # ==========================================
+    # 7. 对象存储与缓存消息队列
+    # ==========================================
+    "minio>=7.2.0",
+    "redis>=5.0.0",
+    "celery>=5.3.0",
+
+    # ==========================================
+    # 8. 视觉与底层解析支持
+    # ==========================================
+    "pdf2image>=1.17.0",
+    "pillow>=10.2.0",
+    "pytesseract>=0.3.10",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.23.0",
+    "ruff>=0.4.0",
+    "mypy>=1.10.0",
+    "types-requests>=2.32.0",
+    "types-redis>=4.6.0",
+]
+
+# ==========================================
+# uv 配置
+# ==========================================
+[tool.uv]
+package = false
+
+# ==========================================
+# Ruff 代码风格与 Lint 配置
+# ==========================================
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+exclude = [
+    ".git",
+    ".venv",
+    "__pycache__",
+    "*.egg-info",
+    "migrations",
+]
+
+[tool.ruff.lint]
+# E/W: pycodestyle, F: pyflakes, I: isort, B: flake8-bugbear
+# C4: flake8-comprehensions, UP: pyupgrade, SIM: flake8-simplify
+select = ["E", "W", "F", "I", "B", "C4", "UP", "SIM"]
+ignore = [
+    "E501",   # line too long — handled by formatter
+    "B008",   # do not perform function calls in argument defaults (FastAPI 依赖注入)
+    "UP007",  # Use X | Y for union type (保持 Python 3.9 兼容写法)
+]
+
+[tool.ruff.lint.isort]
+known-first-party = ["api", "core", "models", "repositories", "services", "tasks"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+docstring-code-format = true
+
+# ==========================================
+# Mypy 静态类型检查配置
+# ==========================================
+[tool.mypy]
+python_version = "3.11"
+warn_return_any = true
+warn_unused_configs = true
+warn_unused_ignores = true
+ignore_missing_imports = true
+disallow_untyped_defs = false
+check_untyped_defs = true
+no_implicit_optional = true
+strict_equality = true
+pretty = true
+
+[[tool.mypy.overrides]]
+module = [
+    "pymilvus.*",
+    "langchain.*",
+    "langchain_core.*",
+    "langchain_community.*",
+    "langchain_milvus.*",
+    "langchain_openai.*",
+    "langgraph.*",
+    "dashscope.*",
+    "celery.*",
+    "minio.*",
+    "unstructured.*",
+    "pytesseract.*",
+    "pdf2image.*",
+    "jose.*",
+    "loguru.*",
+]
+ignore_missing_imports = true
+
+# ==========================================
+# Pytest 配置 (替换 pytest.ini)
+# ==========================================
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
