@@ -8,11 +8,14 @@ class RedisRepo:
     """Redis 缓存层封装"""
 
     def __init__(self):
+        self.client = redis.Redis.from_url(
+            settings.REDIS_URI,
+            decode_responses=True # 自动将 bytes 解码为 str
+        )
+
+    def init(self):
+        """启动时显式初始化：验证 Redis 连接可用。"""
         try:
-            self.client = redis.Redis.from_url(
-                settings.REDIS_URI,
-                decode_responses=True # 自动将 bytes 解码为 str
-            )
             self.client.ping()
         except Exception as e:
             logger.error(f"❌ 连接 Redis 失败: {e}")

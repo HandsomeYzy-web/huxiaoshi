@@ -15,6 +15,13 @@ class MilvusRepo:
         self.vector_dim = settings.MILVUS_VECTOR_DIM
         self.client = MilvusClient(uri=f"http://{settings.MILVUS_HOST}:{settings.MILVUS_PORT}")
 
+    def init(self):
+        """启动时显式初始化：确保 Collection 存在并符合 Schema。"""
+        try:
+            self.ensure_collection()
+        except Exception as exc:
+            logger.error(f"Milvus 初始化失败: {exc}")
+
     def ensure_collection(self):
         try:
             ensure_milvus_connection(self.alias)
