@@ -1,14 +1,13 @@
+
 from fastapi import APIRouter, Depends, Path
 from sqlalchemy.orm import Session
 
 from api.dependencies import get_current_user
 from core.database import get_db
+from core.response import UnifiedResponse, success
 from models.entities.user import User
 from models.schemas.kb_schema import KBCreate, KBResponse, KBUpdate
 from services.kb_service import kb_service
-from core.response import UnifiedResponse, success
-
-from typing import List
 
 router = APIRouter(prefix="/kb", tags=["Knowledge Base"])
 
@@ -23,7 +22,7 @@ async def create_knowledge_base(
     return success(data=created_kb, message="知识库创建成功")
 
 
-@router.get("", response_model=UnifiedResponse[List[KBResponse]], summary="获取所有知识库列表")
+@router.get("", response_model=UnifiedResponse[list[KBResponse]], summary="获取所有知识库列表")
 async def get_all_knowledge_bases(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),

@@ -1,4 +1,3 @@
-from typing import Optional
 
 from fastapi import Depends, Header
 from sqlalchemy.orm import Session
@@ -11,7 +10,7 @@ from repositories.user_repo import UserRepo
 
 
 def get_current_user(
-    authorization: Optional[str] = Header(None),
+    authorization: str | None = Header(None),
     db: Session = Depends(get_db),
 ) -> User:
     if not authorization or not authorization.startswith("Bearer "):

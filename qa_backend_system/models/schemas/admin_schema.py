@@ -1,24 +1,23 @@
 from datetime import datetime
-from typing import Optional
-from pydantic import BaseModel, Field, ConfigDict
 
+from pydantic import BaseModel, ConfigDict, Field
 
 # ─── 角色 ─────────────────────────────────────────────────────
 
 class RoleCreate(BaseModel):
     name: str = Field(..., max_length=64, description="角色名称")
-    description: Optional[str] = Field(None, max_length=256, description="角色描述")
+    description: str | None = Field(None, max_length=256, description="角色描述")
 
 
 class RoleUpdate(BaseModel):
     name: str = Field(..., max_length=64)
-    description: Optional[str] = Field(None, max_length=256)
+    description: str | None = Field(None, max_length=256)
 
 
 class RoleResponse(BaseModel):
     id: int
     name: str
-    description: Optional[str] = None
+    description: str | None = None
     is_system: bool
     created_at: datetime
     permissions: list[str] = Field(default_factory=list, description="权限code列表")
@@ -31,7 +30,7 @@ class RoleResponse(BaseModel):
 class PermissionResponse(BaseModel):
     code: str
     name: str
-    description: Optional[str] = None
+    description: str | None = None
     module: str
 
     model_config = ConfigDict(from_attributes=True)

@@ -1,6 +1,6 @@
 from datetime import datetime
-from typing import Optional
-from sqlalchemy import String, Integer, BigInteger, Text, Boolean, DateTime, ForeignKey, func
+
+from sqlalchemy import BigInteger, Boolean, DateTime, ForeignKey, Integer, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .base import Base  # 引入基类
@@ -22,10 +22,10 @@ class KnowledgeFile(Base):
     minio_object_name: Mapped[str] = mapped_column(String(512), nullable=False, comment="MinIO 对象路径")
 
     status: Mapped[int] = mapped_column(Integer, default=0, nullable=False, comment="0-待处理,1-解析中,2-已完成,3-失败")
-    error_msg: Mapped[Optional[str]] = mapped_column(Text, nullable=True, comment="错误信息")
+    error_msg: Mapped[str | None] = mapped_column(Text, nullable=True, comment="错误信息")
 
-    custom_chunk_size: Mapped[Optional[int]] = mapped_column(Integer, nullable=True, comment="单独指定的文件切分大小")
-    custom_chunk_overlap: Mapped[Optional[int]] = mapped_column(Integer, nullable=True,
+    custom_chunk_size: Mapped[int | None] = mapped_column(Integer, nullable=True, comment="单独指定的文件切分大小")
+    custom_chunk_overlap: Mapped[int | None] = mapped_column(Integer, nullable=True,
                                                                 comment="单独指定的文件切分重叠度")
 
     is_deleted: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)

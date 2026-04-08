@@ -1,17 +1,18 @@
-from typing import Any, Generic, Optional, TypeVar
-from pydantic import BaseModel, Field
+from typing import Any, TypeVar
+
 from fastapi.responses import JSONResponse
+from pydantic import BaseModel, Field
 
 # 定义一个泛型变量，用于代表 data 里面的具体内容
 T = TypeVar("T")
 
-class UnifiedResponse(BaseModel, Generic[T]):
+class UnifiedResponse[T](BaseModel):
     """
     统一响应的 Pydantic 模型 (仅用于生成 Swagger 文档)
     """
     code: int = Field(200, description="业务状态码，200 代表成功，非 200 代表有业务异常")
     message: str = Field("success", description="提示信息，如 '操作成功' 或错误详情")
-    data: Optional[T] = Field(None, description="实际的业务数据")
+    data: T | None = Field(None, description="实际的业务数据")
 
 def success(data: Any = None, message: str = "success") -> dict:
     """

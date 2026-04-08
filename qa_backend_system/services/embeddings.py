@@ -7,8 +7,8 @@ instance so the HTTP client and model handle are reused across the process.
 """
 from __future__ import annotations
 
-from services.custom_e5_embeddings import CustomE5Embeddings
 from core.config import settings
+from services.custom_e5_embeddings import CustomE5Embeddings
 
 _instance: CustomE5Embeddings | None = None
 

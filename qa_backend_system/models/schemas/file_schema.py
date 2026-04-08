@@ -1,6 +1,7 @@
-from pydantic import BaseModel, Field, ConfigDict, model_validator
-from typing import Optional
 from datetime import datetime
+
+from pydantic import BaseModel, ConfigDict, Field, model_validator
+
 
 class FileStrategyUpdate(BaseModel):
     """用户单独指定某一个文件的切分策略请求体"""
@@ -21,9 +22,9 @@ class FileResponse(BaseModel):
     file_type: str
     file_size: int
     status: int
-    error_msg: Optional[str]
-    custom_chunk_size: Optional[int]
-    custom_chunk_overlap: Optional[int]
+    error_msg: str | None
+    custom_chunk_size: int | None
+    custom_chunk_overlap: int | None
     created_at: datetime
     updated_at: datetime
 

@@ -1,4 +1,4 @@
-from typing import List
+
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
 
@@ -24,7 +24,7 @@ class UserInfo(BaseModel):
     email: str
     is_active: bool
     is_admin: bool = False
-    permissions: List[str] = Field(default_factory=list, description="用户拥有的权限code列表")
+    permissions: list[str] = Field(default_factory=list, description="用户拥有的权限code列表")
 
     model_config = ConfigDict(from_attributes=True)
 

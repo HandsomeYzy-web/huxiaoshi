@@ -1,5 +1,4 @@
 ﻿from math import ceil
-from typing import List, Optional
 
 from fastapi import APIRouter, Depends, File, Form, Path, Query, UploadFile
 from fastapi.responses import RedirectResponse
@@ -25,7 +24,7 @@ from services.file_service import file_service
 router = APIRouter(prefix='/file', tags=['Knowledge File'])
 
 
-def _validate_upload_files(files: List[UploadFile]) -> None:
+def _validate_upload_files(files: list[UploadFile]) -> None:
     """Validate file sizes and types before processing."""
     allowed = set(settings.ALLOWED_FILE_TYPES)
     max_size = settings.MAX_UPLOAD_FILE_SIZE_BYTES
@@ -41,12 +40,12 @@ def _validate_upload_files(files: List[UploadFile]) -> None:
             )
 
 
-@router.post('/upload', response_model=UnifiedResponse[List[dict]], summary='批量上传文件')
+@router.post('/upload', response_model=UnifiedResponse[list[dict]], summary='批量上传文件')
 async def upload_files(
     kb_id: int = Form(..., description='关联的知识库 ID'),
-    files: List[UploadFile] = File(..., description='要上传的文件列表'),
-    custom_chunk_size: Optional[int] = Form(None, description='统一指定的自定义切片大小'),
-    custom_chunk_overlap: Optional[int] = Form(None, description='统一指定的自定义切片重叠度'),
+    files: list[UploadFile] = File(..., description='要上传的文件列表'),
+    custom_chunk_size: int | None = Form(None, description='统一指定的自定义切片大小'),
+    custom_chunk_overlap: int | None = Form(None, description='统一指定的自定义切片重叠度'),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -55,7 +54,7 @@ async def upload_files(
 
     _validate_upload_files(files)
 
-    if custom_chunk_size is not None and custom_chunk_overlap is not None:
+    if custom_chunk_size is not None and custom_chunk_overlap is not None:  # noqa: SIM102
         if custom_chunk_overlap >= custom_chunk_size:
             raise BusinessError('切片重叠度必须小于切片大小')
 

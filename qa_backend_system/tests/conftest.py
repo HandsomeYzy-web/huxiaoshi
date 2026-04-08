@@ -3,11 +3,12 @@
 
 使用 SQLite 内存库替代 MySQL，用 unittest.mock 隔离 Milvus / MinIO / Redis。
 """
+from unittest.mock import patch
+
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
-from unittest.mock import MagicMock, patch
 
 from core.config import settings
 from core.database import get_db

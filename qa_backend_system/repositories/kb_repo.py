@@ -1,10 +1,10 @@
-from typing import Iterable, Optional
+from collections.abc import Iterable
 
 from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
 from core.logger import logger
-from models.entities import DocumentChunk, KnowledgeBase, KnowledgeFile
+from models.entities import DocumentChunk, KnowledgeBase
 
 
 class KBRepo:
@@ -24,7 +24,7 @@ class KBRepo:
 
     # ── 查询 ─────────────────────────────────────────────────────────
 
-    def get_kb_by_id(self, kb_id: int, user_id: Optional[int] = None) -> Optional[KnowledgeBase]:
+    def get_kb_by_id(self, kb_id: int, user_id: int | None = None) -> KnowledgeBase | None:
         """按 ID 查询知识库；传入 user_id 时额外校验归属。"""
         conditions = [KnowledgeBase.id == kb_id, KnowledgeBase.is_deleted.is_(False)]
         if user_id is not None:
@@ -32,7 +32,7 @@ class KBRepo:
         stmt = select(KnowledgeBase).where(*conditions)
         return self.db.scalars(stmt).first()
 
-    def get_all_kbs(self, user_id: Optional[int] = None) -> list[KnowledgeBase]:
+    def get_all_kbs(self, user_id: int | None = None) -> list[KnowledgeBase]:
         """查询知识库列表；传入 user_id 时过滤归属，否则返回全部（跨用户场景）。"""
         conditions = [KnowledgeBase.is_deleted.is_(False)]
         if user_id is not None:
@@ -56,7 +56,7 @@ class KBRepo:
 
     # ── 更新 ─────────────────────────────────────────────────────────
 
-    def update_kb(self, kb_id: int, update_data: dict) -> Optional[KnowledgeBase]:
+    def update_kb(self, kb_id: int, update_data: dict) -> KnowledgeBase | None:
         """按字段字典更新知识库，返回更新后的实体。"""
         kb = self.get_kb_by_id(kb_id)
         if not kb:

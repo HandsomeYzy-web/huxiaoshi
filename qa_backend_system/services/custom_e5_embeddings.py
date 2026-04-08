@@ -1,4 +1,3 @@
-from typing import List
 
 import requests
 from langchain_core.embeddings import Embeddings
@@ -18,7 +17,7 @@ class CustomE5Embeddings(Embeddings):
             "Content-Type": "application/json",
         }
 
-    def embed_documents(self, texts: List[str]) -> List[List[float]]:
+    def embed_documents(self, texts: list[str]) -> list[list[float]]:
         payload = {
             "model": self.model,
             "input": texts,
@@ -33,7 +32,7 @@ class CustomE5Embeddings(Embeddings):
         data = response.json()
         return [item["embedding"] for item in data["data"]]
 
-    def embed_query(self, text: str) -> List[float]:
+    def embed_query(self, text: str) -> list[float]:
         query_text = (
             "Instruct: Given a web search query, retrieve relevant passages that answer the query.\n"
             f"Query: {text}"

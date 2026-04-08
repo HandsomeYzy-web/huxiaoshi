@@ -1,4 +1,3 @@
-import json
 
 from fastapi import APIRouter, Depends
 from fastapi.responses import StreamingResponse
@@ -12,8 +11,8 @@ from models.schemas.chat_schema import (
     ChatMessageCreateRequest,
     ChatMessageCreateResponse,
     ChatSessionCreateRequest,
-    ChatSessionRenameRequest,
     ChatSessionDetail,
+    ChatSessionRenameRequest,
     ChatSessionSummary,
 )
 from services.chat_service import chat_service

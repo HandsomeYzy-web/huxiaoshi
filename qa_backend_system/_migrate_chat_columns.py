@@ -1,5 +1,6 @@
 """One-time migration: add intent/generated_sql/sql_result_json to chat_message."""
 from sqlalchemy import create_engine, text
+
 from core.config import settings
 
 engine = create_engine(settings.SQLALCHEMY_DATABASE_URI)

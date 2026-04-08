@@ -8,7 +8,6 @@ from sqlalchemy.orm import Session
 from unstructured.documents.elements import Image, Table
 from unstructured.partition.auto import partition
 
-from core.config import settings
 from core.logger import logger
 from models.entities import DocumentChunk, KnowledgeBase, KnowledgeFile
 from repositories.file_repo import FileRepo

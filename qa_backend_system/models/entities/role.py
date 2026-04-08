@@ -1,5 +1,4 @@
 from datetime import datetime
-from typing import List
 
 from sqlalchemy import BigInteger, Boolean, DateTime, ForeignKey, Integer, String, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -18,9 +17,9 @@ class Role(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), nullable=False)
 
     # 关联
-    user_roles: Mapped[List["UserRole"]] = relationship("UserRole", back_populates="role", cascade="all, delete-orphan")
-    role_permissions: Mapped[List["RolePermission"]] = relationship("RolePermission", back_populates="role", cascade="all, delete-orphan")
-    kb_accesses: Mapped[List["KBRoleAccess"]] = relationship("KBRoleAccess", back_populates="role", cascade="all, delete-orphan")
+    user_roles: Mapped[list["UserRole"]] = relationship("UserRole", back_populates="role", cascade="all, delete-orphan")
+    role_permissions: Mapped[list["RolePermission"]] = relationship("RolePermission", back_populates="role", cascade="all, delete-orphan")
+    kb_accesses: Mapped[list["KBRoleAccess"]] = relationship("KBRoleAccess", back_populates="role", cascade="all, delete-orphan")
 
 
 class UserRole(Base):
@@ -44,7 +43,7 @@ class Permission(Base):
     description: Mapped[str] = mapped_column(String(256), nullable=True, comment="权限描述")
     module: Mapped[str] = mapped_column(String(32), nullable=False, index=True, comment="所属模块")
 
-    role_permissions: Mapped[List["RolePermission"]] = relationship("RolePermission", back_populates="permission", cascade="all, delete-orphan")
+    role_permissions: Mapped[list["RolePermission"]] = relationship("RolePermission", back_populates="permission", cascade="all, delete-orphan")
 
 
 class RolePermission(Base):

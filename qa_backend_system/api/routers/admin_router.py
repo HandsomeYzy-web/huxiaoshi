@@ -5,16 +5,23 @@
   - 知识库访问控制（决定哪些角色可检索哪个KB）
   - 权限列表查询
 """
+
 from fastapi import APIRouter, Depends, Path
 from sqlalchemy.orm import Session
-from typing import List
 
-from api.dependencies import require_admin, get_db
+from api.dependencies import get_db, require_admin
 from core.response import UnifiedResponse, success
 from models.entities.user import User
 from models.schemas.admin_schema import (
-    RoleCreate, RoleUpdate, RoleResponse, PermissionResponse,
-    UserRoleAssign, RolePermissionSet, KBAccessSet, KBAccessResponse, UserAdminResponse,
+    KBAccessResponse,
+    KBAccessSet,
+    PermissionResponse,
+    RoleCreate,
+    RolePermissionSet,
+    RoleResponse,
+    RoleUpdate,
+    UserAdminResponse,
+    UserRoleAssign,
 )
 from services.role_service import role_service
 
@@ -25,7 +32,7 @@ router = APIRouter(prefix="/admin", tags=["Admin"])
 
 @router.get(
     "/permissions",
-    response_model=UnifiedResponse[List[PermissionResponse]],
+    response_model=UnifiedResponse[list[PermissionResponse]],
     summary="获取系统所有可用权限",
 )
 async def list_permissions(
@@ -41,7 +48,7 @@ async def list_permissions(
 
 @router.get(
     "/roles",
-    response_model=UnifiedResponse[List[RoleResponse]],
+    response_model=UnifiedResponse[list[RoleResponse]],
     summary="获取所有角色列表",
 )
 async def list_roles(
@@ -111,7 +118,7 @@ async def set_role_permissions(
 
 @router.get(
     "/users",
-    response_model=UnifiedResponse[List[UserAdminResponse]],
+    response_model=UnifiedResponse[list[UserAdminResponse]],
     summary="获取所有用户列表（含角色信息）",
 )
 async def list_users(
@@ -184,7 +191,7 @@ async def get_kb_access(
 
 @router.get(
     "/kb/access/all",
-    response_model=UnifiedResponse[List[KBAccessResponse]],
+    response_model=UnifiedResponse[list[KBAccessResponse]],
     summary="批量获取所有知识库的访问控制配置",
 )
 async def get_all_kb_access(

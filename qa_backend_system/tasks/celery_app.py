@@ -1,5 +1,6 @@
 from celery import Celery
 from celery.signals import worker_process_init
+
 from core.config import settings
 from core.milvus import ensure_milvus_connection
 

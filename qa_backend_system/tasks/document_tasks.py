@@ -1,12 +1,12 @@
 import traceback
 
-from tasks.celery_app import celery_app
 from core.database import SessionLocal
 from core.logger import logger
 from repositories.file_repo import FileRepo
 from repositories.kb_repo import KBRepo
 from repositories.milvus_repo import milvus_repo
 from services.rag_service import rag_service
+from tasks.celery_app import celery_app
 
 
 @celery_app.task(bind=True, name="process_document_task", max_retries=3)

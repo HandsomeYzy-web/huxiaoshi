@@ -26,8 +26,8 @@ from models.schemas.qa_schema import (
     QAAskRequest,
     QAAskResponse,
 )
-from repositories.kb_repo import KBRepo
 from repositories.file_repo import FileRepo
+from repositories.kb_repo import KBRepo
 from repositories.milvus_repo import milvus_repo
 from services.embeddings import get_embeddings
 from services.llm_service import llm_service

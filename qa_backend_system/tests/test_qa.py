@@ -1,9 +1,10 @@
 """
 QA 检索接口测试（外部服务已在 conftest 中 Mock）。
 """
+from unittest.mock import patch
+
 import pytest
 from fastapi.testclient import TestClient
-from unittest.mock import patch
 
 from core.config import settings
 

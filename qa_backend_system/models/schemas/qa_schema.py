@@ -1,13 +1,12 @@
-from typing import List, Optional
 
 from pydantic import BaseModel, Field
 
 
 class QAAskRequest(BaseModel):
-    kb_id: Optional[int] = Field(None, description="Single knowledge base ID")
-    kb_ids: List[int] = Field(default_factory=list, description="Knowledge base IDs")
+    kb_id: int | None = Field(None, description="Single knowledge base ID")
+    kb_ids: list[int] = Field(default_factory=list, description="Knowledge base IDs")
     question: str = Field(..., min_length=1, max_length=4000, description="User question")
-    top_k: Optional[int] = Field(None, ge=1, le=20, description="Top K chunks to retrieve")
+    top_k: int | None = Field(None, ge=1, le=20, description="Top K chunks to retrieve")
 
 
 class CitationItem(BaseModel):
@@ -22,20 +21,20 @@ class CitationItem(BaseModel):
 
 class QAAskResponse(BaseModel):
     answer: str
-    citations: List[CitationItem]
+    citations: list[CitationItem]
     retrieved_count: int
-    model_used: Optional[str] = None
+    model_used: str | None = None
 
 
 class ChatAskRequest(BaseModel):
     question: str = Field(..., min_length=1, max_length=4000, description="User question")
-    top_k: Optional[int] = Field(None, ge=1, le=20, description="Top K chunks to retrieve")
+    top_k: int | None = Field(None, ge=1, le=20, description="Top K chunks to retrieve")
 
 
 class ChatAskResponse(BaseModel):
     answer: str
-    citations: List[CitationItem]
+    citations: list[CitationItem]
     retrieved_count: int
     queried_kb_count: int
-    queried_kb_ids: List[int]
-    model_used: Optional[str] = None
+    queried_kb_ids: list[int]
+    model_used: str | None = None

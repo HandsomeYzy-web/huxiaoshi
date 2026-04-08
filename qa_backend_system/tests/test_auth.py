@@ -1,11 +1,9 @@
 """
 认证接口测试：注册、登录、获取当前用户信息、无效 Token 访问。
 """
-import pytest
 from fastapi.testclient import TestClient
 
 from core.config import settings
-
 
 PREFIX = settings.API_V1_STR
 

@@ -1,4 +1,4 @@
-from typing import Iterable, Optional
+from collections.abc import Iterable
 
 from sqlalchemy import delete, func, select, update
 from sqlalchemy.orm import Session
@@ -23,7 +23,7 @@ class FileRepo:
 
     # ── KnowledgeFile 查询 ────────────────────────────────────────────
 
-    def get_file_by_id(self, file_id: int) -> Optional[KnowledgeFile]:
+    def get_file_by_id(self, file_id: int) -> KnowledgeFile | None:
         stmt = select(KnowledgeFile).where(
             KnowledgeFile.id == file_id,
             KnowledgeFile.is_deleted.is_(False),
@@ -89,7 +89,7 @@ class FileRepo:
 
     # ── KnowledgeFile 删除 ────────────────────────────────────────────
 
-    def delete_file(self, file_id: int) -> Optional[KnowledgeFile]:
+    def delete_file(self, file_id: int) -> KnowledgeFile | None:
         """软删除单个文件，并硬删除其 DocumentChunk 记录。"""
         file_entity = self.get_file_by_id(file_id)
         if not file_entity:

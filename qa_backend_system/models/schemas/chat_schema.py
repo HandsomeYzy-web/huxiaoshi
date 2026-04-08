@@ -1,5 +1,4 @@
 from datetime import datetime
-from typing import List, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -28,13 +27,13 @@ class ChatMessageResponse(BaseModel):
     session_id: int
     role: str
     content: str
-    model_used: Optional[str] = None
+    model_used: str | None = None
     retrieved_count: int = 0
-    citations: List[CitationItem] = Field(default_factory=list)
+    citations: list[CitationItem] = Field(default_factory=list)
     # ── 三链路扩展 ───────────────────────────────────────────────
-    intent: Optional[str] = None  # casual_chat / data_query / doc_search
-    generated_sql: Optional[str] = None
-    sql_result_json: Optional[str] = None
+    intent: str | None = None  # casual_chat / data_query / doc_search
+    generated_sql: str | None = None
+    sql_result_json: str | None = None
     created_at: datetime
 
 
@@ -47,8 +46,8 @@ class ChatDocumentItem(BaseModel):
 
 class ChatSessionDetail(BaseModel):
     session: ChatSessionSummary
-    messages: List[ChatMessageResponse]
-    involved_documents: List[ChatDocumentItem]
+    messages: list[ChatMessageResponse]
+    involved_documents: list[ChatDocumentItem]
 
 
 class ChatMessageCreateRequest(BaseModel):
@@ -59,4 +58,4 @@ class ChatMessageCreateResponse(BaseModel):
     session: ChatSessionSummary
     user_message: ChatMessageResponse
     assistant_message: ChatMessageResponse
-    involved_documents: List[ChatDocumentItem]
+    involved_documents: list[ChatDocumentItem]

@@ -1,5 +1,4 @@
 from datetime import datetime
-from typing import List
 
 from sqlalchemy import BigInteger, Boolean, DateTime, String, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -22,7 +21,7 @@ class ChatSession(Base):
         nullable=False,
     )
 
-    messages: Mapped[List["ChatMessage"]] = relationship(
+    messages: Mapped[list["ChatMessage"]] = relationship(
         "ChatMessage",
         back_populates="session",
         cascade="all, delete-orphan",

@@ -9,7 +9,6 @@ Text2SQL Service — 将自然语言转换为 SQL 并安全执行。
 """
 from __future__ import annotations
 
-import json
 import re
 from typing import Any
 
@@ -20,7 +19,6 @@ from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.engine import Engine
 
 from core.config import settings
-from core.logger import logger
 
 # SQL 黑名单关键字（即使 LLM 生成也禁止执行）
 _DANGEROUS_KEYWORDS = re.compile(

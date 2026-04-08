@@ -1,10 +1,15 @@
-from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import Session
 
-from core.exceptions import DuplicateResourceError, BusinessError, ResourceNotFoundError, PermissionDeniedError
+from core.exceptions import (
+    BusinessError,
+    DuplicateResourceError,
+    PermissionDeniedError,
+    ResourceNotFoundError,
+)
 from core.logger import logger
-from models.schemas.kb_schema import KBCreate, KBUpdate
 from models.entities import KnowledgeBase
+from models.schemas.kb_schema import KBCreate, KBUpdate
 from repositories.kb_repo import KBRepo
 from repositories.milvus_repo import milvus_repo
 from repositories.minio_repo import minio_repo
@@ -37,7 +42,7 @@ class KBService:
         except IntegrityError:
             db.rollback()
             logger.warning(f"创建知识库失败，名称已存在: {kb_in.name}")
-            raise DuplicateResourceError(f"该知识库名称已存在，请换一个名称")
+            raise DuplicateResourceError("该知识库名称已存在，请换一个名称")
         except Exception as e:
             db.rollback()
             logger.error(f"创建知识库时发生未知错误: {e}")

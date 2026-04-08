@@ -28,8 +28,8 @@ from models.schemas.chat_schema import (
     ChatMessageCreateResponse,
     ChatMessageResponse,
     ChatSessionCreateRequest,
-    ChatSessionRenameRequest,
     ChatSessionDetail,
+    ChatSessionRenameRequest,
     ChatSessionSummary,
 )
 from models.schemas.qa_schema import ChatAskRequest, CitationItem

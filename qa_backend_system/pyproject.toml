@@ -84,6 +84,9 @@ dev = [
 # ==========================================
 [tool.uv]
 package = false
+constraint-dependencies = [
+    "greenlet<3.4.0",
+]
 
 # ==========================================
 # Ruff 代码风格与 Lint 配置

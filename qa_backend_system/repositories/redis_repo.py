@@ -1,8 +1,10 @@
-import redis
 import json
-from typing import Any, Optional
+
+import redis
+
 from core.config import settings
 from core.logger import logger
+
 
 class RedisRepo:
     """Redis 缓存层封装"""
@@ -24,7 +26,7 @@ class RedisRepo:
         """将字典存为 JSON 字符串"""
         self.client.setex(key, expire_seconds, json.dumps(value, ensure_ascii=False))
 
-    def get_json(self, key: str) -> Optional[dict]:
+    def get_json(self, key: str) -> dict | None:
         """获取 JSON 并解析为字典"""
         data = self.client.get(key)
         if data:

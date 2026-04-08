@@ -3,14 +3,13 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from api.routers import chat_router, file_router, kb_router, qa_router, auth_router
-from api.routers import admin_router
+from api.routers import admin_router, auth_router, chat_router, file_router, kb_router, qa_router
 from core.config import settings
-from core.database import init_db, get_db
+from core.database import get_db, init_db
 from core.exceptions import register_exception_handlers
 from core.logger import logger, setup_logger
-from repositories.minio_repo import minio_repo
 from repositories.milvus_repo import milvus_repo
+from repositories.minio_repo import minio_repo
 from repositories.redis_repo import redis_repo
 
 
@@ -26,6 +25,7 @@ async def lifespan(app: FastAPI):
 
     # 初始化权限系统（同步默认角色和权限）
     from services.role_service import role_service
+
     db = next(get_db())
     try:
         role_service.init_defaults(db)

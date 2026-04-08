@@ -1,4 +1,3 @@
-from typing import List
 
 from pydantic import computed_field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -10,7 +9,7 @@ class Settings(BaseSettings):
     API_V1_STR: str = "/api/v1"
 
     # ── CORS ──────────────────────────────────────────────────────
-    CORS_ORIGINS: List[str] = ["*"]
+    CORS_ORIGINS: list[str] = ["*"]
 
     # ── MySQL ─────────────────────────────────────────────────────
     MYSQL_USER: str
@@ -87,7 +86,7 @@ class Settings(BaseSettings):
 
     # ── File Upload ───────────────────────────────────────────────
     MAX_UPLOAD_FILE_SIZE_MB: int = 200
-    ALLOWED_FILE_TYPES: List[str] = [
+    ALLOWED_FILE_TYPES: list[str] = [
         "pdf", "docx", "doc", "xlsx", "xls", "csv",
         "pptx", "ppt", "txt", "md", "html", "htm",
         "png", "jpg", "jpeg", "bmp", "tiff", "webp",

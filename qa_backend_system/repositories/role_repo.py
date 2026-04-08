@@ -1,9 +1,8 @@
-from typing import Optional
 
-from sqlalchemy import select, delete
-from sqlalchemy.orm import Session, selectinload
+from sqlalchemy import delete, select
+from sqlalchemy.orm import Session
 
-from models.entities.role import Role, UserRole, Permission, RolePermission, KBRoleAccess
+from models.entities.role import KBRoleAccess, Permission, Role, RolePermission, UserRole
 
 
 class RoleRepo:
@@ -18,16 +17,16 @@ class RoleRepo:
         self.db.refresh(role)
         return role
 
-    def get_role_by_id(self, role_id: int) -> Optional[Role]:
+    def get_role_by_id(self, role_id: int) -> Role | None:
         return self.db.get(Role, role_id)
 
-    def get_role_by_name(self, name: str) -> Optional[Role]:
+    def get_role_by_name(self, name: str) -> Role | None:
         return self.db.scalars(select(Role).where(Role.name == name)).first()
 
     def list_roles(self) -> list[Role]:
         return list(self.db.scalars(select(Role).order_by(Role.id)).all())
 
-    def update_role(self, role_id: int, name: str, description: str) -> Optional[Role]:
+    def update_role(self, role_id: int, name: str, description: str) -> Role | None:
         role = self.get_role_by_id(role_id)
         if not role:
             return None

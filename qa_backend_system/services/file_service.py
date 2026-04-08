@@ -1,18 +1,18 @@
 import hashlib
 import os
-from typing import List, Optional
+
 from fastapi import UploadFile
 from sqlalchemy.orm import Session
 
-from core.config import settings
-from core.exceptions import ResourceNotFoundError, BusinessError
-from models.entities import KnowledgeFile
-from repositories.kb_repo import KBRepo
-from repositories.file_repo import FileRepo
-from repositories.minio_repo import minio_repo
-from repositories.milvus_repo import milvus_repo
+from core.exceptions import ResourceNotFoundError
 from core.logger import logger
+from models.entities import KnowledgeFile
+from repositories.file_repo import FileRepo
+from repositories.kb_repo import KBRepo
+from repositories.milvus_repo import milvus_repo
+from repositories.minio_repo import minio_repo
 from tasks.document_tasks import process_document_task
+
 
 class FileService:
     """文件处理业务逻辑层"""
@@ -32,11 +32,11 @@ class FileService:
             self,
             db: Session,
             kb_id: int,
-            files: List[UploadFile],
+            files: list[UploadFile],
             user_id: int,
-            custom_chunk_size: Optional[int] = None,
-            custom_chunk_overlap: Optional[int] = None
-    ) -> List[dict]:
+            custom_chunk_size: int | None = None,
+            custom_chunk_overlap: int | None = None
+    ) -> list[dict]:
         """
         处理批量文件上传
         包含：防重校验 -> 上传 MinIO -> 写入 MySQL -> 触发异步解析任务

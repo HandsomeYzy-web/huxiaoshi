@@ -1,5 +1,4 @@
 from datetime import datetime
-from typing import List
 
 from sqlalchemy import BigInteger, Boolean, DateTime, String, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -22,5 +21,5 @@ class User(Base):
     )
 
     # 关联
-    user_roles: Mapped[List["UserRole"]] = relationship("UserRole", cascade="all, delete-orphan")
+    user_roles: Mapped[list["UserRole"]] = relationship("UserRole", cascade="all, delete-orphan")
 

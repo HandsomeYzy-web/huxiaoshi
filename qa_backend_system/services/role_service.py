@@ -1,9 +1,8 @@
 from sqlalchemy.orm import Session
-from sqlalchemy.exc import IntegrityError
 
-from core.exceptions import ResourceNotFoundError, DuplicateResourceError, PermissionDeniedError
+from core.exceptions import DuplicateResourceError, PermissionDeniedError, ResourceNotFoundError
 from core.logger import logger
-from core.permissions import ALL_PERMISSIONS, DEFAULT_USER_PERMISSIONS, ADMIN_PERMISSIONS
+from core.permissions import ADMIN_PERMISSIONS, ALL_PERMISSIONS, DEFAULT_USER_PERMISSIONS
 from models.entities.role import Role
 from models.entities.user import User
 from models.schemas.admin_schema import RoleCreate, RoleUpdate

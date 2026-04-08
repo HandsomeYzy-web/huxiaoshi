@@ -1,11 +1,10 @@
-from fastapi import Request, FastAPI
+from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
-from starlette.exceptions import HTTPException as StarletteHTTPException
 from sqlalchemy.exc import SQLAlchemyError
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from core.logger import logger
 from core.response import error
-
 
 # ============================================================
 # Domain exceptions — raised in the Service layer.

@@ -1,4 +1,3 @@
-from typing import Optional
 
 from sqlalchemy import func, select, update
 from sqlalchemy.orm import Session
@@ -31,7 +30,7 @@ class ChatRepo:
         )
         return list(self.db.scalars(stmt).all())
 
-    def get_chat_session(self, session_id: int, user_id: int) -> Optional[ChatSession]:
+    def get_chat_session(self, session_id: int, user_id: int) -> ChatSession | None:
         stmt = select(ChatSession).where(
             ChatSession.id == session_id,
             ChatSession.user_id == user_id,
@@ -52,7 +51,7 @@ class ChatRepo:
         self.db.execute(stmt)
         self.db.commit()
 
-    def rename_chat_session(self, session_id: int, user_id: int, title: str) -> Optional[ChatSession]:
+    def rename_chat_session(self, session_id: int, user_id: int, title: str) -> ChatSession | None:
         session = self.get_chat_session(session_id, user_id)
         if not session:
             return None
