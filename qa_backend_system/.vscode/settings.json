@@ -7,7 +7,6 @@
   // ==========================================
   // Pylance 语言服务器配置
   // ==========================================
-  "python.languageServer": "Pylance",
   "python.analysis.typeCheckingMode": "basic",
   "python.analysis.extraPaths": ["."],
   "python.analysis.autoImportCompletions": true,
