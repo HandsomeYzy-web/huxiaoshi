@@ -63,7 +63,7 @@ class ChatService:
         return ChatSessionSummary.model_validate(session)
 
     def delete_session(self, db: Session, session_id: int, user_id: int) -> None:
-        deleted = ChatRepo(db).soft_delete_chat_session(session_id, user_id)
+        deleted = ChatRepo(db).delete_chat_session(session_id, user_id)
         if not deleted:
             raise ResourceNotFoundError(f"聊天会话不存在或无权操作: session_id={session_id}")
 
@@ -322,10 +322,11 @@ class ChatService:
 
     def _handle_data_query(self, question: str) -> tuple[str, str | None, list, str | None, str | None]:
         from services.text2sql_service import text2sql_service
+        from services.llm_service import llm_service
         try:
             sql, summary, columns, rows = text2sql_service.query(question)
             result_json = json.dumps({"columns": columns, "rows": rows}, ensure_ascii=False, default=str)
-            return summary, settings.EFFECTIVE_LLM_MODEL, [], sql, result_json
+            return summary, llm_service._resolved_model_name, [], sql, result_json
         except Exception as e:
             logger.error(f"Text2SQL pipeline error: {e}")
             return f"数据查询失败: {e}", None, [], None, None

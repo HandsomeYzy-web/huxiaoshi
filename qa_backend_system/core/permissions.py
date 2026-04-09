@@ -41,7 +41,7 @@ ALL_PERMISSIONS: list[PermDef] = [
 ]
 
 # 普通用户默认权限
-DEFAULT_USER_PERMISSIONS: list[str] = [KB_QUERY.code, CHAT_USE.code, QA_TEST.code]
+DEFAULT_USER_PERMISSIONS: list[str] = [KB_QUERY.code, CHAT_USE.code]
 
 # 管理员拥有所有权限
 ADMIN_PERMISSIONS: list[str] = [p.code for p in ALL_PERMISSIONS]

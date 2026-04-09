@@ -1,6 +1,16 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import type { RouteRecordRaw } from 'vue-router'
 
+declare module 'vue-router' {
+  interface RouteMeta {
+    title?: string
+    public?: boolean
+    permission?: string
+    requireAdmin?: boolean
+    section?: string
+  }
+}
+
 const routes: RouteRecordRaw[] = [
   {
     path: '/login',
@@ -56,6 +66,12 @@ const routes: RouteRecordRaw[] = [
         meta: { title: '系统管理', section: 'admin', requireAdmin: true }
       }
     ]
+  },
+  {
+    path: '/403',
+    name: 'Forbidden',
+    component: () => import('../views/auth/login.vue'),
+    meta: { title: '无权限', public: true }
   }
 ]
 
@@ -64,18 +80,44 @@ const router = createRouter({
   routes
 })
 
-router.beforeEach((to) => {
+router.beforeEach(async (to) => {
   const token = localStorage.getItem('qa_access_token')
-  if (!to.meta.public && !token) {
+
+  // 1. 公开页面无需认证
+  if (to.meta.public) {
+    if (token && (to.path === '/login' || to.path === '/register')) {
+      return '/'
+    }
+    return
+  }
+
+  // 2. 未登录跳转登录页
+  if (!token) {
     return '/login'
   }
-  if (to.meta.public && token && (to.path === '/login' || to.path === '/register')) {
-    return '/'
+
+  // 3. 权限校验：懒加载 auth store，确保用户信息已获取
+  const { useAuthStore } = await import('../stores/auth')
+  const authStore = useAuthStore()
+
+  // 确保用户信息已加载
+  if (!authStore.user) {
+    await authStore.init()
   }
-  // 权限守卫（requireAdmin 由 layout 侧边栏控制入口，路由层做最后兜底）
-  if (to.meta.requireAdmin) {
-    // 实际权限校验由页面组件自己处理，路由层不重复从 localStorage 读 user 数据
-    // 避免刷新时异步 store 未初始化导致误跳转
+
+  // 用户信息加载失败（token 失效等）
+  if (!authStore.user) {
+    return '/login'
+  }
+
+  // 4. 管理员页面校验
+  if (to.meta.requireAdmin && !authStore.isAdmin) {
+    return '/workspace/overview'
+  }
+
+  // 5. 权限码校验
+  if (to.meta.permission && !authStore.hasPermission(to.meta.permission)) {
+    return '/workspace/overview'
   }
 })
 

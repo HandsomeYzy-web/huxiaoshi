@@ -25,12 +25,13 @@ class MinioRepo:
         try:
             if not self.client.bucket_exists(self.bucket_name):
                 self.client.make_bucket(self.bucket_name)
-                logger.info(f"✅ MinIO Bucket '{self.bucket_name}' 创建成功")
+                logger.info(f"MinIO Bucket '{self.bucket_name}' 创建成功")
         except Exception as e:
-            logger.error(f"❌ 连接 MinIO 失败: {e}")
+            logger.error(f"连接 MinIO 失败: {e}")
 
     def upload_file_bytes(self, object_name: str, file_data: bytes, content_type: str = "application/octet-stream") -> str:
         """上传字节流到 MinIO"""
+        self._ensure_bucket_exists()
         data_stream = io.BytesIO(file_data)
         file_size = len(file_data)
         self.client.put_object(

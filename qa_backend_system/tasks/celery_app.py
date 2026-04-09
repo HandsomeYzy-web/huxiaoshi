@@ -49,9 +49,9 @@ def init_worker_milvus_connection(**kwargs):
 
     try:
         ensure_milvus_connection()
-        logger.info(f"✅ [Worker 初始化] Milvus 连接已建立: {settings.MILVUS_HOST}:{settings.MILVUS_PORT}")
+        logger.info(f"[Worker 初始化] Milvus 连接已建立: {settings.MILVUS_HOST}:{settings.MILVUS_PORT}")
     except Exception as e:
-        logger.error(f"❌ [Worker 初始化] Milvus 连接失败: {e}")
+        logger.error(f"[Worker 初始化] Milvus 连接失败: {e}")
         raise
 
 

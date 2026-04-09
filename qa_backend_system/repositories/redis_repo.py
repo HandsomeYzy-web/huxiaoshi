@@ -18,7 +18,7 @@ class RedisRepo:
         try:
             self.client.ping()
         except Exception as e:
-            logger.error(f"❌ 连接 Redis 失败: {e}")
+            logger.error(f"连接 Redis 失败: {e}")
 
     def set_json(self, key: str, value: dict, expire_seconds: int = 3600):
         """将字典存为 JSON 字符串"""

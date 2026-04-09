@@ -53,7 +53,7 @@ def init_db():
     try:
         # Base.metadata.create_all 会扫描所有继承自 Base 的类，并生成建表 SQL
         Base.metadata.create_all(bind=engine)
-        logger.info("✅ 数据库表结构同步成功！")
+        logger.info("数据库表结构同步成功！")
     except Exception as e:
-        logger.error(f"❌ 数据库连接或建表失败: {e}")
+        logger.error(f"数据库连接或建表失败: {e}")
         raise e

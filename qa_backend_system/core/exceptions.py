@@ -22,7 +22,7 @@ class AppException(Exception):
 
 
 class ResourceNotFoundError(AppException):
-    """Resource does not exist or has been soft-deleted."""
+    """Resource does not exist."""
 
     def __init__(self, message: str):
         super().__init__(message, code=404)

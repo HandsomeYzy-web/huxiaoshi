@@ -9,13 +9,28 @@ from __future__ import annotations
 
 import httpx
 
-from core.config import settings
 from core.exceptions import ExternalServiceError
 from core.logger import logger
 
 
 class RerankerService:
     """调用外部 Reranker API，返回重新排序后的 (原始index, score) 列表。"""
+
+    def _resolve_reranker_config(self) -> tuple[bool, str, str, str]:
+        """Return (enabled, base_url, api_key, model) from DB."""
+        try:
+            from core.database import SessionLocal
+            from repositories.model_config_repo import ModelConfigRepo
+            db = SessionLocal()
+            try:
+                active = ModelConfigRepo(db).get_active("rerank")
+                if active:
+                    return True, active.api_base_url, active.api_key, active.model_name
+            finally:
+                db.close()
+        except Exception:
+            pass
+        return False, "", "", ""
 
     def rerank(
         self,
@@ -30,12 +45,11 @@ class RerankerService:
             list of (original_index, rerank_score), sorted descending by score,
             limited to top_k items.
         """
-        if not settings.RERANKER_ENABLED or not settings.RERANKER_BASE_URL:
-            # 降级：保持原顺序，分数置为 1.0 / rank
-            return [(i, 1.0 / (i + 1)) for i in range(min(top_k, len(documents)))]
-
         try:
-            return self._call_rerank_api(query, documents, top_k)
+            enabled, base_url, api_key, model = self._resolve_reranker_config()
+            if not enabled or not base_url:
+                return [(i, 1.0 / (i + 1)) for i in range(min(top_k, len(documents)))]
+            return self._call_rerank_api(query, documents, top_k, base_url, api_key, model)
         except ExternalServiceError:
             raise
         except Exception as exc:
@@ -47,15 +61,18 @@ class RerankerService:
         query: str,
         documents: list[str],
         top_k: int,
+        base_url: str,
+        api_key: str,
+        model: str,
     ) -> list[tuple[int, float]]:
         """向符合 Jina/Cohere 规范的 /v1/rerank 端点发请求。"""
-        url = settings.RERANKER_BASE_URL.rstrip("/") + "/v1/rerank"
+        url = base_url.rstrip("/") + "/v1/rerank"
         headers: dict[str, str] = {"Content-Type": "application/json"}
-        if settings.RERANKER_API_KEY:
-            headers["Authorization"] = f"Bearer {settings.RERANKER_API_KEY}"
+        if api_key:
+            headers["Authorization"] = f"Bearer {api_key}"
 
         payload = {
-            "model": settings.RERANKER_MODEL,
+            "model": model,
             "query": query,
             "documents": documents,
             "top_n": top_k,

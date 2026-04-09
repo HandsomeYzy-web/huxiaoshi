@@ -45,6 +45,7 @@ rich>=13.7.1                 # 终端美化与彩色横幅打印
 # ==========================================
 langgraph>=0.0.30            # 用于构建 Agent 智能体的状态机与多步路由流
 unstructured[all-docs]>=0.13.0 # 文档解析器 (精准解析 PDF/Word/Excel)
+unstructured-inference        # unstructured hi_res 策略依赖（PDF 高精度解析）
 cryptography>=42.0.0         # 用于对外部业务数据库的密码进行对称加密存储
 tiktoken>=0.6.0              # 用于精确计算大模型 Token 消耗量
 
@@ -56,14 +57,28 @@ redis>=5.0.0                 # 推荐：用于缓存业务数据或作为异步�
 celery>=5.3.0                # 推荐：处理耗时的文档解析与向量化入库任务
 
 # ==========================================
-# 8. 视觉与底层解析支持 (新增)
+# 8. 视觉与底层解析支持
 # ==========================================
 pdf2image>=1.17.0            # 配合 unstructured 处理 PDF 图像提取
 pillow>=10.2.0               # 图像处理基础库
 pytesseract>=0.3.10          # Tesseract OCR Python 绑定（需安装 tesseract-ocr 系统包）
 
 # ==========================================
-# 9. 测试框架
+# 9. 各文件格式解析依赖
+# ==========================================
+python-docx>=1.1.0           # DOCX 文件解析
+python-pptx>=0.6.23          # PPTX 文件解析
+openpyxl>=3.1.0              # XLSX 文件解析
+xlrd>=2.0.0                  # XLS（旧版 Excel）文件解析
+pdfminer.six>=20221105       # PDF 文本提取
+beautifulsoup4>=4.12.0       # HTML 文件解析
+lxml>=5.0.0                  # HTML/XML 解析加速引擎
+docutils>=0.20               # RST (reStructuredText) 文件解析
+striprtf>=0.0.26             # RTF 文件解析
+ebooklib>=0.18               # EPUB 电子书解析
+
+# ==========================================
+# 10. 测试框架
 # ==========================================
 pytest>=8.0.0
 pytest-asyncio>=0.23.0

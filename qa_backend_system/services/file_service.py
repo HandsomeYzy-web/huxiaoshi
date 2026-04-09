@@ -108,7 +108,7 @@ class FileService:
         完整删除单个文件：
         1. 删除 Milvus 中该文件所有向量
         2. 删除 MinIO 中该文件对象
-        3. 软删除 MySQL 中 KnowledgeFile / DocumentChunk 记录
+        3. 硬删除 MySQL 中 KnowledgeFile / DocumentChunk 记录
         """
         file_repo = FileRepo(db)
         file_entity = file_repo.get_file_by_id(file_id)
@@ -120,7 +120,7 @@ class FileService:
             raise ResourceNotFoundError(f"文件 ID={file_id} 不存在或无权访问")
 
         # 失败时 repo 层会抛 ExternalServiceError，由全局 handler 处理
-        milvus_repo.delete_chunks_by_file_id(file_id)
+        milvus_repo.delete_chunks_by_file_id(file_entity.kb_id, file_id)
         minio_repo.delete_file(file_entity.minio_object_name)
 
         file_repo.delete_file(file_id)

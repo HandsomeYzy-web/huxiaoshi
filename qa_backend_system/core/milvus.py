@@ -4,7 +4,7 @@ from pymilvus import connections
 
 from core.config import settings
 
-
+# TODO:移入setting
 DEFAULT_MILVUS_ALIAS = "default"
 
 _milvus_lock = threading.Lock()

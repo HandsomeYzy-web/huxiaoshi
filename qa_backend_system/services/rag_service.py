@@ -1,3 +1,4 @@
+import json
 import os
 import tempfile
 import uuid
@@ -41,6 +42,21 @@ class RAGService:
         chunk_size = file_entity.custom_chunk_size or kb_entity.default_chunk_size
         chunk_overlap = file_entity.custom_chunk_overlap or kb_entity.default_chunk_overlap
 
+        # Resolve separators: file-level > kb-level > default
+        separators = None
+        if file_entity.custom_separators:
+            try:
+                separators = json.loads(file_entity.custom_separators)
+            except (json.JSONDecodeError, TypeError):
+                pass
+        if not separators and kb_entity.default_separators:
+            try:
+                separators = json.loads(kb_entity.default_separators)
+            except (json.JSONDecodeError, TypeError):
+                pass
+        if not separators:
+            separators = ["\n\n", "\n", "。", "，", " ", ""]
+
         # Safety check: overlap must be less than size
         if chunk_overlap >= chunk_size:
             chunk_overlap = max(0, chunk_size // 5)
@@ -54,7 +70,7 @@ class RAGService:
             logger.warning(f"No text extracted for file: {file_entity.file_name}")
             return
 
-        chunks = self._split_text(full_text, chunk_size, chunk_overlap, file_entity)
+        chunks = self._split_text(full_text, chunk_size, chunk_overlap, file_entity, separators)
         if not chunks:
             logger.warning(f"No chunks produced for file: {file_entity.file_name}")
             return
@@ -83,7 +99,7 @@ class RAGService:
             }
             for chunk, vector in zip(saved_chunks, vectors)
         ]
-        milvus_repo.insert_chunks(vector_rows)
+        milvus_repo.insert_chunks(file_entity.kb_id, vector_rows)
         logger.info(f"Indexed {len(saved_chunks)} chunks for file: {file_entity.file_name}")
 
     def _extract_text(self, file_entity: KnowledgeFile, kb_entity: KnowledgeBase) -> str:
@@ -215,11 +231,14 @@ class RAGService:
         chunk_size: int,
         chunk_overlap: int,
         file_entity: KnowledgeFile,
+        separators: list[str] | None = None,
     ) -> list[Document]:
+        if separators is None:
+            separators = ["\n\n", "\n", "。", "，", " ", ""]
         text_splitter = RecursiveCharacterTextSplitter(
             chunk_size=chunk_size,
             chunk_overlap=chunk_overlap,
-            separators=["\n\n", "\n", "。", "，", " ", ""],
+            separators=separators,
         )
         base_doc = Document(
             page_content=full_text,

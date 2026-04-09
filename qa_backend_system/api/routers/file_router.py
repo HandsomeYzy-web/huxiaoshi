@@ -13,6 +13,8 @@ from core.response import UnifiedResponse, success
 from models.entities.user import User
 from models.schemas.file_schema import (
     ChunkPageResponse,
+    ChunkPreviewRequest,
+    ChunkPreviewResponse,
     ChunkResponse,
     FilePageResponse,
     FileResponse,
@@ -78,6 +80,12 @@ async def get_kb_files(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    # 校验用户有权访问该知识库
+    from services.role_service import role_service
+    accessible_kb_ids = role_service.get_accessible_kb_ids(db, current_user.id)
+    if accessible_kb_ids is not None and kb_id not in accessible_kb_ids:
+        raise ResourceNotFoundError(f'知识库 ID={kb_id} 不存在或无权访问')
+
     repo = FileRepo(db)
     items, total = repo.get_files_by_kb_paginated(kb_id, page, page_size)
     total_pages = ceil(total / page_size) if total else 0
@@ -117,6 +125,12 @@ async def get_file_chunks(
     if not file_entity:
         raise ResourceNotFoundError('文件不存在或已被删除')
 
+    # 校验用户有权访问该文件所属知识库
+    from services.role_service import role_service
+    accessible_kb_ids = role_service.get_accessible_kb_ids(db, current_user.id)
+    if accessible_kb_ids is not None and file_entity.kb_id not in accessible_kb_ids:
+        raise ResourceNotFoundError('文件不存在或无权访问')
+
     chunks, total = repo.get_chunks_by_file_id_paginated(file_id, page, page_size)
     total_pages = ceil(total / page_size) if total else 0
 
@@ -147,6 +161,9 @@ async def update_file_strategy(
 
     file_entity.custom_chunk_size = strategy_in.custom_chunk_size
     file_entity.custom_chunk_overlap = strategy_in.custom_chunk_overlap
+    if strategy_in.custom_separators is not None:
+        import json
+        file_entity.custom_separators = json.dumps(strategy_in.custom_separators, ensure_ascii=False)
     file_entity.status = 0
     file_entity.error_msg = None
 
@@ -170,3 +187,60 @@ async def get_image(
     object_name = f"kb_{kb_id}/images/{image_name}"
     url = minio_repo.get_presigned_url(object_name, expires_hours=2)
     return RedirectResponse(url=url)
+
+
+@router.post('/preview-chunks', response_model=UnifiedResponse[ChunkPreviewResponse], summary='预览文件切分结果')
+async def preview_file_chunks(
+    request: ChunkPreviewRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """在不实际执行入库的情况下，预览文件按指定参数切分后的结果。"""
+    from services.rag_service import rag_service
+    from repositories.kb_repo import KBRepo
+
+    repo = FileRepo(db)
+    file_entity = repo.get_file_by_id(request.file_id)
+    if not file_entity:
+        raise ResourceNotFoundError('文件不存在或已被删除')
+
+    kb_entity = KBRepo(db).get_kb_by_id(file_entity.kb_id)
+    if not kb_entity:
+        raise ResourceNotFoundError('关联知识库不存在')
+
+    # 提取文本
+    full_text = rag_service._extract_text(file_entity, kb_entity)
+    if not full_text or not full_text.strip():
+        raise BusinessError('文件中未提取到任何文本内容')
+
+    # 使用指定参数切分
+    separators = request.separators or ["\n\n", "\n", "。", "，", " ", ""]
+    from langchain_text_splitters import RecursiveCharacterTextSplitter
+    from langchain_core.documents import Document
+
+    text_splitter = RecursiveCharacterTextSplitter(
+        chunk_size=request.chunk_size,
+        chunk_overlap=request.chunk_overlap,
+        separators=separators,
+    )
+    base_doc = Document(page_content=full_text)
+    chunks = text_splitter.split_documents([base_doc])
+
+    from models.schemas.file_schema import ChunkPreviewItem
+    preview_items = [
+        ChunkPreviewItem(
+            index=i,
+            content=chunk.page_content,
+            char_count=len(chunk.page_content),
+        )
+        for i, chunk in enumerate(chunks)
+    ]
+
+    return success(
+        data=ChunkPreviewResponse(
+            total_chunks=len(preview_items),
+            chunks=preview_items,
+            total_chars=sum(item.char_count for item in preview_items),
+        ),
+        message='切分预览成功',
+    )

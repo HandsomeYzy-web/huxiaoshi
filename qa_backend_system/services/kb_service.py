@@ -1,5 +1,6 @@
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
+import json
 
 from core.exceptions import DuplicateResourceError, BusinessError, ResourceNotFoundError, PermissionDeniedError
 from core.logger import logger
@@ -26,6 +27,7 @@ class KBService:
             description=kb_in.description,
             default_chunk_size=kb_in.default_chunk_size,
             default_chunk_overlap=kb_in.default_chunk_overlap,
+            default_separators=json.dumps(kb_in.default_separators, ensure_ascii=False) if kb_in.default_separators else None,
             retrieval_top_k=kb_in.retrieval_top_k,
             retrieval_score_threshold=kb_in.retrieval_score_threshold,
             enable_rerank=kb_in.enable_rerank,
@@ -33,6 +35,8 @@ class KBService:
 
         try:
             created_kb = repo.create_kb(kb_entity)
+            # 立即在 Milvus 中创建对应的 collection
+            milvus_repo.ensure_collection(created_kb.id)
             return created_kb
         except IntegrityError:
             db.rollback()
@@ -80,7 +84,7 @@ class KBService:
         完整删除知识库（仅创建者或管理员可操作）：
         1. 删除 Milvus 中该知识库所有向量
         2. 删除 MinIO 中该知识库目录下所有文件
-        3. 软删除 MySQL 中 KnowledgeBase / KnowledgeFile / DocumentChunk 记录
+        3. 硬删除 MySQL 中 KnowledgeBase / KnowledgeFile / DocumentChunk 记录
         """
         repo = KBRepo(db)
         from repositories.user_repo import UserRepo
@@ -108,14 +112,13 @@ class KBService:
             minio_error = e
             logger.error(f"删除MinIO文件失败(kb_id={kb_id}): {e}")
 
-        # MySQL 软删除始终执行
+        # MySQL 硬删除始终执行
         repo.delete_kb(kb_id)
         logger.info(f"知识库删除完成: ID={kb_id}, name={kb.name}")
 
-        # 如果外部服务有失败，发出警告但不阻断（数据已标记删除）
         if milvus_error or minio_error:
             logger.warning(
-                f"知识库 ID={kb_id} 已软删除，但部分外部资源清理失败: "
+                f"知识库 ID={kb_id} 已硬删除，但部分外部资源清理失败: "
                 f"milvus={'OK' if not milvus_error else str(milvus_error)}, "
                 f"minio={'OK' if not minio_error else str(minio_error)}"
             )

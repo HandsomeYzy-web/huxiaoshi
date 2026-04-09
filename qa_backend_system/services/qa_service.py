@@ -1,17 +1,16 @@
 """
-QA Service — retrieval-augmented generation pipeline.
+QA Service — hybrid retrieval-augmented generation pipeline.
+
+Uses a combination of vector search (Milvus) and BM25-style keyword search
+(MySQL) to produce a merged, deduplicated, and reranked result set.
 
 The retrieval step is encapsulated as a LangChain RunnableLambda so it can be
-composed into any LCEL chain.  The LLM chain in LLMService is already LCEL
-(prompt | model | StrOutputParser), so the full RAG pipeline is:
-
-    retriever_runnable | (context formatter) | prompt | llm | StrOutputParser
-
-Documents returned by the retriever carry all necessary metadata (kb_name,
-file_name, score …) so downstream steps never need to re-query MySQL.
+composed into any LCEL chain.
 """
 from __future__ import annotations
 
+import re
+from collections import defaultdict
 from collections.abc import Generator
 
 from langchain_core.documents import Document
@@ -35,10 +34,6 @@ from services.reranker_service import reranker_service
 
 
 class QAService:
-    # ------------------------------------------------------------------
-    # Public API
-    # ------------------------------------------------------------------
-
     def ask(self, db: Session, request: QAAskRequest) -> QAAskResponse:
         repo = KBRepo(db)
         target_kb_ids = self._resolve_target_kb_ids(repo, request.kb_id, request.kb_ids)
@@ -120,7 +115,21 @@ class QAService:
             yield chunk, is_model_info, model_name, []
 
     # ------------------------------------------------------------------
-    # LangChain retriever factory
+    # BM25-style keyword extraction
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _extract_keywords(question: str) -> list[str]:
+        """Extract meaningful keywords from the question for BM25 keyword search."""
+        # Remove common Chinese stop words and punctuation, split into tokens
+        # Simple approach: split by non-word chars, filter short tokens
+        tokens = re.findall(r'[\u4e00-\u9fff]+|[a-zA-Z0-9]+', question)
+        # Filter out very short tokens (single char Chinese, very short english)
+        keywords = [t for t in tokens if len(t) >= 2]
+        return keywords[:5]  # Limit to top 5 keywords
+
+    # ------------------------------------------------------------------
+    # LangChain retriever factory (hybrid: vector + BM25)
     # ------------------------------------------------------------------
 
     def _make_retriever(
@@ -131,14 +140,16 @@ class QAService:
         score_threshold: float = 0.0,
     ) -> RunnableLambda:
         """
-        Returns a LangChain RunnableLambda that accepts a query string and
-        returns a list of enriched Document objects ready for the LLM chain.
+        Returns a LangChain RunnableLambda that performs hybrid retrieval:
+        1. Vector search via Milvus (semantic similarity)
+        2. BM25-style keyword search via MySQL (lexical matching)
+        3. Reciprocal Rank Fusion (RRF) to merge results
+        4. Optional reranking
 
         When a single KB is targeted, its own retrieval_top_k / retrieval_score_threshold
         config takes precedence over the caller-supplied defaults.
         """
 
-        # Resolve single-KB config at factory time (before the closure)
         _top_k = top_k
         _score_threshold = score_threshold
         _enable_rerank = False
@@ -156,53 +167,112 @@ class QAService:
             file_repo = FileRepo(db)
 
             # 启用 rerank 时先多取候选集
-            fetch_k = _top_k * 3 if _enable_rerank else _top_k
+            fetch_k = _top_k * 3 if _enable_rerank else _top_k * 2
 
+            # ── 1. Vector search (Milvus) ─────────────────────────
             if kb_ids and len(kb_ids) == 1:
-                results = milvus_repo.search_chunks(kb_ids[0], query_vector, top_k=fetch_k)
+                vector_results = milvus_repo.search_chunks(kb_ids[0], query_vector, top_k=fetch_k)
             elif kb_ids:
-                kb_id_set = set(kb_ids)
-                results = [
-                    item
-                    for item in milvus_repo.search_chunks_across_kbs(query_vector, top_k=fetch_k * 3)
-                    if int(item["entity"]["kb_id"]) in kb_id_set
-                ][:fetch_k]
+                vector_results = milvus_repo.search_chunks_across_kbs(kb_ids, query_vector, top_k=fetch_k)
             else:
-                results = milvus_repo.search_chunks_across_kbs(query_vector, top_k=fetch_k)
+                # No kb_ids specified — need to get all KB ids
+                all_kbs = kb_repo.get_all_kbs()
+                all_kb_ids = [kb.id for kb in all_kbs]
+                if not all_kb_ids:
+                    vector_results = []
+                else:
+                    vector_results = milvus_repo.search_chunks_across_kbs(all_kb_ids, query_vector, top_k=fetch_k)
 
-            if not results:
-                return []
-
-            # Apply score threshold filter (Milvus distance: higher = more similar)
+            # Apply score threshold filter
             if _score_threshold > 0.0:
-                results = [r for r in results if float(r.get("distance", 0.0)) >= _score_threshold]
+                vector_results = [r for r in vector_results if float(r.get("distance", 0.0)) >= _score_threshold]
 
-            if not results:
+            # ── 2. BM25-style keyword search (MySQL) ──────────────
+            keywords = self._extract_keywords(question)
+            bm25_chunks = []
+            if keywords:
+                keyword_str = keywords[0]  # Use primary keyword for LIKE search
+                if kb_ids and len(kb_ids) == 1:
+                    bm25_chunks = file_repo.search_chunks_by_keyword(kb_ids[0], keyword_str, limit=fetch_k)
+                elif kb_ids:
+                    # Search across specific KBs
+                    for kid in kb_ids:
+                        bm25_chunks.extend(file_repo.search_chunks_by_keyword(kid, keyword_str, limit=fetch_k))
+                else:
+                    bm25_chunks = file_repo.search_chunks_by_keyword_across_kbs(keyword_str, limit=fetch_k)
+
+                # Try additional keywords if first keyword yields few results
+                if len(bm25_chunks) < 3 and len(keywords) > 1:
+                    for kw in keywords[1:3]:
+                        if kb_ids and len(kb_ids) == 1:
+                            extra = file_repo.search_chunks_by_keyword(kb_ids[0], kw, limit=fetch_k // 2)
+                        else:
+                            extra = file_repo.search_chunks_by_keyword_across_kbs(kw, limit=fetch_k // 2)
+                        seen_ids = {c.id for c in bm25_chunks}
+                        bm25_chunks.extend([c for c in extra if c.id not in seen_ids])
+
+            # ── 3. Reciprocal Rank Fusion (RRF) ──────────────────
+            # Build chunk_id -> score maps
+            rrf_k = 60  # RRF constant
+            chunk_scores: dict[int, float] = defaultdict(float)
+            chunk_data: dict[int, dict] = {}
+
+            # Vector results contribution
+            for rank, item in enumerate(vector_results):
+                entity = item["entity"]
+                chunk_id = int(entity["chunk_id"])
+                chunk_scores[chunk_id] += 1.0 / (rrf_k + rank + 1)
+                if chunk_id not in chunk_data:
+                    chunk_data[chunk_id] = {
+                        "chunk_id": chunk_id,
+                        "kb_id": int(entity["kb_id"]),
+                        "file_id": int(entity["file_id"]),
+                        "text": entity["text"],
+                        "vector_score": float(item.get("distance", 0.0)),
+                    }
+
+            # BM25 results contribution
+            for rank, chunk in enumerate(bm25_chunks):
+                chunk_id = chunk.id
+                chunk_scores[chunk_id] += 1.0 / (rrf_k + rank + 1)
+                if chunk_id not in chunk_data:
+                    chunk_data[chunk_id] = {
+                        "chunk_id": chunk_id,
+                        "kb_id": chunk.kb_id,
+                        "file_id": chunk.file_id,
+                        "text": chunk.content,
+                        "vector_score": 0.0,
+                    }
+
+            if not chunk_data:
                 return []
 
-            # Batch-fetch metadata from MySQL to avoid N+1 queries
-            kb_id_list = list({int(r["entity"]["kb_id"]) for r in results})
-            file_id_list = list({int(r["entity"]["file_id"]) for r in results})
+            # Sort by RRF score
+            sorted_chunks = sorted(chunk_scores.items(), key=lambda x: x[1], reverse=True)
+
+            # Batch-fetch metadata from MySQL
+            kb_id_list = list({chunk_data[cid]["kb_id"] for cid, _ in sorted_chunks if cid in chunk_data})
+            file_id_list = list({chunk_data[cid]["file_id"] for cid, _ in sorted_chunks if cid in chunk_data})
             kb_map = {kb.id: kb for kb in kb_repo.get_kbs_by_ids(kb_id_list)}
             file_map = {f.id: f for f in file_repo.get_files_by_ids(file_id_list)}
 
             documents: list[Document] = []
-            for item in results:
-                entity = item["entity"]
-                kb_id = int(entity["kb_id"])
-                file_id = int(entity["file_id"])
+            for chunk_id, rrf_score in sorted_chunks:
+                data = chunk_data[chunk_id]
+                kb_id = data["kb_id"]
+                file_id = data["file_id"]
                 kb = kb_map.get(kb_id)
                 file = file_map.get(file_id)
                 documents.append(
                     Document(
-                        page_content=entity["text"],
+                        page_content=data["text"],
                         metadata={
-                            "chunk_id": int(entity["chunk_id"]),
+                            "chunk_id": chunk_id,
                             "kb_id": kb_id,
                             "kb_name": getattr(kb, "name", f"KB {kb_id}"),
                             "file_id": file_id,
                             "file_name": file.file_name if file else "unknown",
-                            "score": float(item.get("distance", 0.0)),
+                            "score": rrf_score,
                         },
                     )
                 )

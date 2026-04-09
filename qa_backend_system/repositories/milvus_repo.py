@@ -7,41 +7,45 @@ from core.milvus import DEFAULT_MILVUS_ALIAS, ensure_milvus_connection
 
 
 class MilvusRepo:
-    """Milvus access wrapper for chunk vectors."""
+    """Milvus access wrapper — each knowledge base gets its own collection."""
 
     def __init__(self):
         self.alias = DEFAULT_MILVUS_ALIAS
-        self.collection_name = "qa_knowledge_collection"
-        self.vector_dim = settings.MILVUS_VECTOR_DIM
         self.client = MilvusClient(uri=f"http://{settings.MILVUS_HOST}:{settings.MILVUS_PORT}")
 
-    def init(self):
-        """启动时显式初始化：确保 Collection 存在并符合 Schema。"""
-        try:
-            self.ensure_collection()
-        except Exception as exc:
-            logger.error(f"Milvus 初始化失败: {exc}")
+    @property
+    def vector_dim(self) -> int:
+        """Get vector dimension from active embedding config's extra_params."""
+        from services.embeddings import get_embedding_vector_dim
+        return get_embedding_vector_dim()
 
-    def ensure_collection(self):
+    @staticmethod
+    def _collection_name(kb_id: int) -> str:
+        """Generate collection name for a knowledge base."""
+        return f"kb_collection_{kb_id}"
+
+    def ensure_collection(self, kb_id: int):
+        """Ensure the collection for the given KB exists."""
+        collection_name = self._collection_name(kb_id)
         try:
             ensure_milvus_connection(self.alias)
-            if not utility.has_collection(self.collection_name, using=self.alias):
-                self._create_collection()
+            if not utility.has_collection(collection_name, using=self.alias):
+                self._create_collection(collection_name)
             else:
-                self._validate_collection()
+                self._validate_collection(collection_name)
         except Exception as exc:
-            logger.error(f"Failed to ensure Milvus collection: {exc}")
+            logger.error(f"Failed to ensure Milvus collection for kb_id={kb_id}: {exc}")
             raise
 
-    def _load_collection(self):
-        collection = Collection(self.collection_name, using=self.alias)
-        load_state = utility.load_state(self.collection_name, using=self.alias)
+    def _load_collection(self, collection_name: str):
+        collection = Collection(collection_name, using=self.alias)
+        load_state = utility.load_state(collection_name, using=self.alias)
         if str(load_state).upper() != "LOADED":
             collection.load()
-            logger.info(f"Milvus collection '{self.collection_name}' loaded")
+            logger.info(f"Milvus collection '{collection_name}' loaded")
         return collection
 
-    def _create_collection(self):
+    def _create_collection(self, collection_name: str):
         fields = [
             FieldSchema(name="id", dtype=DataType.INT64, is_primary=True, auto_id=True),
             FieldSchema(name="chunk_id", dtype=DataType.INT64, description="Chunk ID"),
@@ -50,8 +54,8 @@ class MilvusRepo:
             FieldSchema(name="text", dtype=DataType.VARCHAR, max_length=65535, description="Chunk text"),
             FieldSchema(name="embedding", dtype=DataType.FLOAT_VECTOR, dim=self.vector_dim),
         ]
-        schema = CollectionSchema(fields=fields, description="QA document chunk collection")
-        collection = Collection(name=self.collection_name, schema=schema, using=self.alias)
+        schema = CollectionSchema(fields=fields, description=f"Document chunks for {collection_name}")
+        collection = Collection(name=collection_name, schema=schema, using=self.alias)
         collection.create_index(
             field_name="embedding",
             index_params={
@@ -60,16 +64,16 @@ class MilvusRepo:
                 "params": {"nlist": 1024},
             },
         )
-        logger.info(f"Milvus collection '{self.collection_name}' created")
+        logger.info(f"Milvus collection '{collection_name}' created")
 
-    def _validate_collection(self):
-        collection = Collection(self.collection_name, using=self.alias)
+    def _validate_collection(self, collection_name: str):
+        collection = Collection(collection_name, using=self.alias)
         field_map = {field.name: field for field in collection.schema.fields}
         required_fields = {"chunk_id", "kb_id", "file_id", "text", "embedding"}
         missing_fields = required_fields - set(field_map)
         if missing_fields:
             raise RuntimeError(
-                f"Milvus collection '{self.collection_name}' schema is outdated. "
+                f"Milvus collection '{collection_name}' schema is outdated. "
                 f"Missing fields: {sorted(missing_fields)}. Please recreate the collection."
             )
 
@@ -77,55 +81,63 @@ class MilvusRepo:
         dim = getattr(embedding_field, "params", {}).get("dim")
         if dim != self.vector_dim:
             raise RuntimeError(
-                f"Milvus collection '{self.collection_name}' has embedding dim={dim}, "
+                f"Milvus collection '{collection_name}' has embedding dim={dim}, "
                 f"expected {self.vector_dim}. Please recreate the collection."
             )
 
-    def insert_chunks(self, rows: list[dict]):
+    def insert_chunks(self, kb_id: int, rows: list[dict]):
         if not rows:
             return
-        self.ensure_collection()
-        self.client.insert(collection_name=self.collection_name, data=rows)
+        self.ensure_collection(kb_id)
+        collection_name = self._collection_name(kb_id)
+        self.client.insert(collection_name=collection_name, data=rows)
 
     def search_chunks(self, kb_id: int, query_vector: list[float], top_k: int = 5) -> list[dict]:
-        self.ensure_collection()
-        self._load_collection()
+        collection_name = self._collection_name(kb_id)
+        self.ensure_collection(kb_id)
+        self._load_collection(collection_name)
         results = self.client.search(
-            collection_name=self.collection_name,
-            data=[query_vector],
-            limit=top_k,
-            filter=f"kb_id == {kb_id}",
-            output_fields=["chunk_id", "kb_id", "file_id", "text"],
-        )
-        return results[0] if results else []
-
-    def search_chunks_across_kbs(self, query_vector: list[float], top_k: int = 8) -> list[dict]:
-        self.ensure_collection()
-        self._load_collection()
-        results = self.client.search(
-            collection_name=self.collection_name,
+            collection_name=collection_name,
             data=[query_vector],
             limit=top_k,
             output_fields=["chunk_id", "kb_id", "file_id", "text"],
         )
         return results[0] if results else []
 
-    def delete_chunks_by_file_id(self, file_id: int):
+    def search_chunks_across_kbs(self, kb_ids: list[int], query_vector: list[float], top_k: int = 8) -> list[dict]:
+        """Search across multiple KB collections and merge results."""
+        all_results = []
+        for kid in kb_ids:
+            try:
+                results = self.search_chunks(kid, query_vector, top_k=top_k)
+                all_results.extend(results)
+            except Exception as e:
+                logger.warning(f"Search failed for kb_id={kid}: {e}")
+        # Sort by distance descending (higher = more similar for COSINE)
+        all_results.sort(key=lambda x: float(x.get("distance", 0.0)), reverse=True)
+        return all_results[:top_k]
+
+    def delete_chunks_by_file_id(self, kb_id: int, file_id: int):
         try:
-            self.ensure_collection()
-            self._load_collection()
-            self.client.delete(self.collection_name, filter=f"file_id == {file_id}")
-            logger.info(f"Deleted Milvus vectors for file_id={file_id}")
+            collection_name = self._collection_name(kb_id)
+            self.ensure_collection(kb_id)
+            self._load_collection(collection_name)
+            self.client.delete(collection_name, filter=f"file_id == {file_id}")
+            logger.info(f"Deleted Milvus vectors for file_id={file_id} in {collection_name}")
         except Exception as e:
             logger.error(f"Milvus 删除失败 (file_id={file_id}): {e}")
             raise ExternalServiceError(f"向量库删除失败: file_id={file_id}")
 
     def delete_chunks_by_kb_id(self, kb_id: int):
+        """Drop the entire collection for the KB."""
         try:
-            self.ensure_collection()
-            self._load_collection()
-            self.client.delete(self.collection_name, filter=f"kb_id == {kb_id}")
-            logger.info(f"Deleted Milvus vectors for kb_id={kb_id}")
+            collection_name = self._collection_name(kb_id)
+            ensure_milvus_connection(self.alias)
+            if utility.has_collection(collection_name, using=self.alias):
+                utility.drop_collection(collection_name, using=self.alias)
+                logger.info(f"Dropped Milvus collection: {collection_name}")
+            else:
+                logger.info(f"Milvus collection '{collection_name}' not found, nothing to drop")
         except Exception as e:
             logger.error(f"Milvus 删除失败 (kb_id={kb_id}): {e}")
             raise ExternalServiceError(f"向量库删除失败: kb_id={kb_id}")

@@ -137,6 +137,73 @@
           </el-table-column>
         </el-table>
       </el-tab-pane>
+
+      <!-- ─── 模型配置 Tab ─────────────────────────────────── -->
+      <el-tab-pane label="模型配置" name="models">
+        <div class="tab-header">
+          <h3>模型管理</h3>
+          <div style="display: flex; gap: 10px; align-items: center">
+            <el-select v-model="modelTypeFilter" placeholder="全部类型" clearable style="width: 140px" @change="loadModels">
+              <el-option label="LLM 大模型" value="llm" />
+              <el-option label="Embedding 向量" value="embedding" />
+              <el-option label="Rerank 精排" value="rerank" />
+            </el-select>
+            <el-button type="primary" @click="openCreateModel">新增模型</el-button>
+            <el-button type="warning" :loading="rebuilding" @click="handleRebuildAllKBs">
+              重建所有知识库
+            </el-button>
+          </div>
+        </div>
+
+        <el-table :data="models" v-loading="modelsLoading" border stripe>
+          <el-table-column prop="id" label="ID" width="60" />
+          <el-table-column prop="name" label="显示名称" width="160" />
+          <el-table-column label="类型" width="100">
+            <template #default="{ row }">
+              <el-tag :type="modelTypeTagMap[row.model_type] || 'info'" size="small">
+                {{ modelTypeLabel[row.model_type] || row.model_type }}
+              </el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column label="供应商" width="130">
+            <template #default="{ row }">
+              {{ providerDisplayName(row.provider) }}
+            </template>
+          </el-table-column>
+          <el-table-column prop="model_name" label="模型标识" min-width="180" show-overflow-tooltip />
+          <el-table-column prop="api_base_url" label="API Base URL" min-width="200" show-overflow-tooltip />
+          <el-table-column prop="api_key_masked" label="API Key" width="140" />
+          <el-table-column label="状态" width="90">
+            <template #default="{ row }">
+              <el-tag :type="row.is_active ? 'success' : 'info'" size="small">
+                {{ row.is_active ? '激活' : '未激活' }}
+              </el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column label="操作" width="220" fixed="right">
+            <template #default="{ row }">
+              <el-button
+                size="small"
+                type="success"
+                :disabled="row.is_active"
+                @click="handleActivateModel(row)"
+              >激活</el-button>
+              <el-button size="small" type="warning" @click="openEditModel(row)">编辑</el-button>
+              <el-button
+                size="small"
+                type="danger"
+                :disabled="row.is_active"
+                @click="handleDeleteModel(row)"
+              >删除</el-button>
+            </template>
+          </el-table-column>
+        </el-table>
+
+        <div class="model-hint">
+          <el-icon><InfoFilled /></el-icon>
+          <span>每种类型（LLM / Embedding / Rerank）同时只能有一个激活的模型配置。激活新模型会自动关闭同类型的旧模型。</span>
+        </div>
+      </el-tab-pane>
     </el-tabs>
 
     <!-- ─── 新建/编辑角色 Dialog ──────────────────────────── -->
@@ -206,20 +273,79 @@
         <el-button type="primary" :loading="saving" @click="submitKBAccess">保存</el-button>
       </template>
     </el-dialog>
+
+    <!-- ─── 新建/编辑模型配置 Dialog ──────────────────────── -->
+    <el-dialog v-model="modelDialogVisible" :title="modelDialogTitle" width="600px">
+      <el-form :model="modelForm" label-width="110px">
+        <el-form-item label="模型类型" required>
+          <el-select v-model="modelForm.model_type" placeholder="请选择" :disabled="!!editingModelId" style="width: 100%">
+            <el-option label="LLM 大模型" value="llm" />
+            <el-option label="Embedding 向量" value="embedding" />
+            <el-option label="Rerank 精排" value="rerank" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="供应商" required>
+          <el-select v-model="modelForm.provider" placeholder="请选择" filterable style="width: 100%">
+            <el-option
+              v-for="p in filteredProviders"
+              :key="p.provider"
+              :label="p.display_name"
+              :value="p.provider"
+            />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="显示名称" required>
+          <el-input v-model="modelForm.name" placeholder="如：GPT-4o 生产环境" />
+        </el-form-item>
+        <el-form-item label="模型标识" required>
+          <el-input v-model="modelForm.model_name" placeholder="如：gpt-4o / qwen-plus / bge-large-zh-v1.5" />
+        </el-form-item>
+        <el-form-item label="API Base URL" required>
+          <el-input v-model="modelForm.api_base_url" placeholder="如：https://api.openai.com/v1" />
+        </el-form-item>
+        <el-form-item label="API Key" required>
+          <el-input
+            v-model="modelForm.api_key"
+            :placeholder="editingModelId ? '留空则不修改' : '请输入 API Key'"
+            show-password
+          />
+        </el-form-item>
+        <el-form-item label="额外参数">
+          <el-input
+            v-model="modelForm.extra_params"
+            type="textarea"
+            :rows="3"
+            placeholder='可选，JSON 格式，如：{"temperature": 0.1, "max_tokens": 4096}'
+          />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="modelDialogVisible = false">取消</el-button>
+        <el-button type="primary" :loading="saving" @click="submitModelForm">确定</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { InfoFilled } from '@element-plus/icons-vue'
 import { useAuthStore } from '../../stores/auth'
 import {
   listRoles, createRole, updateRole, deleteRole,
   setRolePermissions, listPermissions, listAdminUsers,
   setUserRoles, setUserAdmin, getAllKBAccess, setKBAccess,
+  listModelConfigs, createModelConfig, updateModelConfig,
+  deleteModelConfig, activateModelConfig, listModelProviders,
+  rebuildAllKnowledgeBases,
 } from '../../api/admin'
 import { getKnowledgeBases } from '../../api/kb'
-import type { Role, Permission, AdminUser, KBAccessInfo } from '../../api/admin'
+import type {
+  Role, Permission, AdminUser, KBAccessInfo,
+  ModelConfig, ModelConfigCreate, ModelConfigUpdate, ModelProviderInfo,
+  ModelActivateResponse,
+} from '../../api/admin'
 
 const authStore = useAuthStore()
 const activeTab = ref('roles')
@@ -424,6 +550,180 @@ async function submitKBAccess() {
   }
 }
 
+// ─── Models ───────────────────────────────────────────────────
+const models = ref<ModelConfig[]>([])
+const modelsLoading = ref(false)
+const modelTypeFilter = ref('')
+const providers = ref<ModelProviderInfo[]>([])
+const rebuilding = ref(false)
+const modelTypeLabel: Record<string, string> = { llm: 'LLM', embedding: 'Embedding', rerank: 'Rerank' }
+const modelTypeTagMap: Record<string, string> = { llm: 'danger', embedding: 'warning', rerank: '' }
+
+const filteredProviders = computed(() => {
+  if (!modelForm.value.model_type) return providers.value
+  return providers.value.filter(p => p.supported_types.includes(modelForm.value.model_type))
+})
+
+function providerDisplayName(code: string): string {
+  const p = providers.value.find(item => item.provider === code)
+  return p ? p.display_name : code
+}
+
+async function loadModels() {
+  modelsLoading.value = true
+  try {
+    models.value = await listModelConfigs(modelTypeFilter.value || undefined)
+  } finally {
+    modelsLoading.value = false
+  }
+}
+
+// Model CRUD
+const modelDialogVisible = ref(false)
+const modelDialogTitle = ref('新增模型')
+const editingModelId = ref<number | null>(null)
+const modelForm = ref<ModelConfigCreate>({
+  model_type: 'llm',
+  provider: '',
+  name: '',
+  model_name: '',
+  api_base_url: '',
+  api_key: '',
+  extra_params: '',
+})
+
+function openCreateModel() {
+  modelDialogTitle.value = '新增模型'
+  editingModelId.value = null
+  modelForm.value = {
+    model_type: 'llm',
+    provider: '',
+    name: '',
+    model_name: '',
+    api_base_url: '',
+    api_key: '',
+    extra_params: '',
+  }
+  modelDialogVisible.value = true
+}
+
+function openEditModel(row: ModelConfig) {
+  modelDialogTitle.value = '编辑模型'
+  editingModelId.value = row.id
+  modelForm.value = {
+    model_type: row.model_type,
+    provider: row.provider,
+    name: row.name,
+    model_name: row.model_name,
+    api_base_url: row.api_base_url,
+    api_key: '', // 不回显密钥
+    extra_params: row.extra_params || '',
+  }
+  modelDialogVisible.value = true
+}
+
+async function submitModelForm() {
+  const f = modelForm.value
+  if (!f.model_type || !f.provider || !f.name || !f.model_name || !f.api_base_url) {
+    ElMessage.warning('请填写所有必填项')
+    return
+  }
+  if (!editingModelId.value && !f.api_key) {
+    ElMessage.warning('请输入 API Key')
+    return
+  }
+  // 校验 extra_params 是否为合法 JSON
+  if (f.extra_params) {
+    try {
+      JSON.parse(f.extra_params)
+    } catch {
+      ElMessage.warning('额外参数必须是合法的 JSON 格式')
+      return
+    }
+  }
+  saving.value = true
+  try {
+    if (editingModelId.value) {
+      const updateData: ModelConfigUpdate = {
+        name: f.name,
+        model_name: f.model_name,
+        api_base_url: f.api_base_url,
+        extra_params: f.extra_params || undefined,
+      }
+      if (f.api_key) updateData.api_key = f.api_key
+      await updateModelConfig(editingModelId.value, updateData)
+      ElMessage.success('模型配置更新成功')
+    } else {
+      await createModelConfig(f)
+      ElMessage.success('模型配置创建成功')
+    }
+    modelDialogVisible.value = false
+    await loadModels()
+  } finally {
+    saving.value = false
+  }
+}
+
+async function handleActivateModel(row: ModelConfig) {
+  await ElMessageBox.confirm(
+    `激活「${row.name}」将关闭当前同类型（${modelTypeLabel[row.model_type]}）的已激活模型，确定？`,
+    '确认激活',
+    { type: 'warning' }
+  )
+  const result: ModelActivateResponse = await activateModelConfig(row.id)
+  ElMessage.success('模型已激活')
+  await loadModels()
+
+  // Embedding 模型切换后弹出重建提示
+  if (result.needs_rebuild) {
+    try {
+      await ElMessageBox.confirm(
+        'Embedding 模型已切换，所有知识库的向量数据维度可能不兼容。\n是否立即重建所有知识库？（文件将重新解析和向量化，耗时取决于数据量）',
+        '⚠️ 需要重建知识库',
+        {
+          confirmButtonText: '立即重建',
+          cancelButtonText: '稍后手动重建',
+          type: 'warning',
+          dangerouslyUseHTMLString: false,
+        }
+      )
+      rebuilding.value = true
+      const rebuildResult = await rebuildAllKnowledgeBases()
+      ElMessage.success(
+        `重建任务已提交：${rebuildResult.total_kbs} 个知识库，${rebuildResult.total_files} 个文件排队处理中`
+      )
+    } catch {
+      ElMessage.info('你可以稍后在模型配置页面点击「重建所有知识库」按钮手动执行')
+    } finally {
+      rebuilding.value = false
+    }
+  }
+}
+
+async function handleDeleteModel(row: ModelConfig) {
+  await ElMessageBox.confirm(`确定删除模型配置「${row.name}」吗？`, '确认删除', { type: 'warning' })
+  await deleteModelConfig(row.id)
+  ElMessage.success('删除成功')
+  await loadModels()
+}
+
+async function handleRebuildAllKBs() {
+  await ElMessageBox.confirm(
+    '此操作将删除所有知识库的向量数据并重新处理所有文件，耗时取决于数据量。确定继续？',
+    '确认重建所有知识库',
+    { confirmButtonText: '确认重建', cancelButtonText: '取消', type: 'warning' }
+  )
+  rebuilding.value = true
+  try {
+    const result = await rebuildAllKnowledgeBases()
+    ElMessage.success(
+      `重建任务已提交：${result.total_kbs} 个知识库，${result.total_files} 个文件排队处理中`
+    )
+  } finally {
+    rebuilding.value = false
+  }
+}
+
 // ─── Init ─────────────────────────────────────────────────────
 onMounted(async () => {
   const [, perms] = await Promise.all([
@@ -431,7 +731,9 @@ onMounted(async () => {
     listPermissions(),
   ])
   allPermissions.value = perms
-  await Promise.all([loadUsers(), loadKBAccess()])
+  await Promise.all([loadUsers(), loadKBAccess(), loadModels()])
+  // 加载供应商列表
+  try { providers.value = await listModelProviders() } catch { /* ignore */ }
 })
 </script>
 
@@ -493,5 +795,16 @@ onMounted(async () => {
   color: #666;
   margin-bottom: 12px;
   font-size: 14px;
+}
+.model-hint {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 14px;
+  padding: 10px 14px;
+  background: #ecf5ff;
+  border-radius: 6px;
+  color: #409eff;
+  font-size: 13px;
 }
 </style>

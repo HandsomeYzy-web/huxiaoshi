@@ -26,21 +26,15 @@ class FileRepo:
     def get_file_by_id(self, file_id: int) -> Optional[KnowledgeFile]:
         stmt = select(KnowledgeFile).where(
             KnowledgeFile.id == file_id,
-            KnowledgeFile.is_deleted.is_(False),
         )
         return self.db.scalars(stmt).first()
 
     def get_files_by_kb(self, kb_id: int) -> list[KnowledgeFile]:
         stmt = (
             select(KnowledgeFile)
-            .where(KnowledgeFile.kb_id == kb_id, KnowledgeFile.is_deleted.is_(False))
+            .where(KnowledgeFile.kb_id == kb_id)
             .order_by(KnowledgeFile.created_at.desc())
         )
-        return list(self.db.scalars(stmt).all())
-
-    def get_files_by_kb_all(self, kb_id: int) -> list[KnowledgeFile]:
-        """返回知识库下所有文件（含已删除），用于级联清理 MinIO。"""
-        stmt = select(KnowledgeFile).where(KnowledgeFile.kb_id == kb_id)
         return list(self.db.scalars(stmt).all())
 
     def get_files_by_kb_paginated(
@@ -48,7 +42,6 @@ class FileRepo:
     ) -> tuple[list[KnowledgeFile], int]:
         base_stmt = select(KnowledgeFile).where(
             KnowledgeFile.kb_id == kb_id,
-            KnowledgeFile.is_deleted.is_(False),
         )
         total_stmt = select(func.count()).select_from(base_stmt.subquery())
         total = int(self.db.scalar(total_stmt) or 0)
@@ -71,7 +64,6 @@ class FileRepo:
         stmt = select(KnowledgeFile.id).where(
             KnowledgeFile.kb_id == kb_id,
             KnowledgeFile.md5 == md5,
-            KnowledgeFile.is_deleted.is_(False),
         )
         return self.db.execute(stmt).first() is not None
 
@@ -90,15 +82,15 @@ class FileRepo:
     # ── KnowledgeFile 删除 ────────────────────────────────────────────
 
     def delete_file(self, file_id: int) -> Optional[KnowledgeFile]:
-        """软删除单个文件，并硬删除其 DocumentChunk 记录。"""
+        """硬删除单个文件及其 DocumentChunk 记录。"""
         file_entity = self.get_file_by_id(file_id)
         if not file_entity:
             return None
-        file_entity.is_deleted = True
         stmt = delete(DocumentChunk).where(DocumentChunk.file_id == file_id)
         self.db.execute(stmt)
+        self.db.delete(file_entity)
         self.db.commit()
-        logger.info(f"Soft deleted file and purged chunks: file_id={file_id}")
+        logger.info(f"Hard deleted file and purged chunks: file_id={file_id}")
         return file_entity
 
     # ── DocumentChunk 操作 ────────────────────────────────────────────
@@ -136,3 +128,40 @@ class FileRepo:
             .limit(page_size)
         )
         return list(self.db.scalars(stmt).all()), total
+
+    @staticmethod
+    def _escape_like(keyword: str) -> str:
+        """Escape special LIKE characters to prevent injection."""
+        return keyword.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+
+    def search_chunks_by_keyword(self, kb_id: int, keyword: str, limit: int = 20) -> list[DocumentChunk]:
+        """基于 MySQL LIKE 的关键词搜索，用于 BM25 混合检索的文本召回。"""
+        if not keyword.strip():
+            return []
+        escaped = self._escape_like(keyword)
+        stmt = (
+            select(DocumentChunk)
+            .where(
+                DocumentChunk.kb_id == kb_id,
+                DocumentChunk.content.like(f"%{escaped}%"),
+            )
+            .limit(limit)
+        )
+        return list(self.db.scalars(stmt).all())
+
+    def search_chunks_by_keyword_across_kbs(self, keyword: str, limit: int = 20) -> list[DocumentChunk]:
+        """跨知识库的关键词搜索。"""
+        if not keyword.strip():
+            return []
+        escaped = self._escape_like(keyword)
+        stmt = (
+            select(DocumentChunk)
+            .where(DocumentChunk.content.like(f"%{escaped}%"))
+            .limit(limit)
+        )
+        return list(self.db.scalars(stmt).all())
+
+    def get_chunks_by_kb_id(self, kb_id: int) -> list[DocumentChunk]:
+        """获取知识库下所有分段（用于 BM25 索引构建）。"""
+        stmt = select(DocumentChunk).where(DocumentChunk.kb_id == kb_id)
+        return list(self.db.scalars(stmt).all())

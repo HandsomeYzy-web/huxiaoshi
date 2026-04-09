@@ -5,12 +5,13 @@ from .chat_session import ChatSession
 from .document_chunk import DocumentChunk
 from .knowledge_base import KnowledgeBase
 from .knowledge_file import KnowledgeFile
+from .model_config import ModelConfig
 from .user import User
 from .role import Role, UserRole, Permission, RolePermission, KBRoleAccess
 
 __all__ = [
     "Base", "KnowledgeBase", "KnowledgeFile", "DocumentChunk",
-    "ChatSession", "ChatMessage", "User",
+    "ChatSession", "ChatMessage", "User", "ModelConfig",
     "Role", "UserRole", "Permission", "RolePermission", "KBRoleAccess",
 ]
 

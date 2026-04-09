@@ -83,13 +83,16 @@ class Text2SQLService:
         return self._engine
 
     def _get_model(self) -> ChatOpenAI | None:
-        if not (settings.EFFECTIVE_LLM_BASE_URL and settings.EFFECTIVE_LLM_API_KEY and settings.EFFECTIVE_LLM_MODEL):
-            return None
         if self._model is None:
+            from services.llm_service import llm_service
+            cfg = llm_service._resolve_llm_config()
+            if not cfg:
+                return None
+            base_url, api_key, model_name = cfg
             self._model = ChatOpenAI(
-                base_url=settings.EFFECTIVE_LLM_BASE_URL.rstrip("/"),
-                api_key=settings.EFFECTIVE_LLM_API_KEY,
-                model=settings.EFFECTIVE_LLM_MODEL,
+                base_url=base_url.rstrip("/"),
+                api_key=api_key,
+                model=model_name,
                 temperature=0.0,
                 request_timeout=settings.LLM_TIMEOUT,
             )
@@ -237,12 +240,16 @@ class Text2SQLService:
             yield result_text, False, None
             return
 
-        yield "", True, settings.EFFECTIVE_LLM_MODEL
+        from services.llm_service import llm_service
+        cfg = llm_service._resolve_llm_config()
+        base_url, api_key, model_name = cfg
+
+        yield "", True, model_name
 
         streaming_model = ChatOpenAI(
-            base_url=settings.EFFECTIVE_LLM_BASE_URL.rstrip("/"),
-            api_key=settings.EFFECTIVE_LLM_API_KEY,
-            model=settings.EFFECTIVE_LLM_MODEL,
+            base_url=base_url.rstrip("/"),
+            api_key=api_key,
+            model=model_name,
             temperature=0.1,
             streaming=True,
             request_timeout=settings.LLM_TIMEOUT,

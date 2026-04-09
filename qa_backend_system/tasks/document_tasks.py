@@ -59,7 +59,7 @@ def reprocess_document_task(self, file_id: int):
         repo.update_file_status(file_id, status=1)
 
         repo.delete_chunks_by_file_id(file_id)
-        milvus_repo.delete_chunks_by_file_id(file_id)
+        milvus_repo.delete_chunks_by_file_id(file_entity.kb_id, file_id)
 
         rag_service.process_and_embed_file(db, file_entity, kb_entity)
         repo.update_file_status(file_id, status=2)

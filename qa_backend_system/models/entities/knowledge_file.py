@@ -1,6 +1,6 @@
 from datetime import datetime
 from typing import Optional
-from sqlalchemy import String, Integer, BigInteger, Text, Boolean, DateTime, ForeignKey, func
+from sqlalchemy import String, Integer, BigInteger, Text, DateTime, ForeignKey, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .base import Base  # 引入基类
@@ -27,8 +27,8 @@ class KnowledgeFile(Base):
     custom_chunk_size: Mapped[Optional[int]] = mapped_column(Integer, nullable=True, comment="单独指定的文件切分大小")
     custom_chunk_overlap: Mapped[Optional[int]] = mapped_column(Integer, nullable=True,
                                                                 comment="单独指定的文件切分重叠度")
+    custom_separators: Mapped[Optional[str]] = mapped_column(Text, nullable=True, comment="单独指定的分隔符列表(JSON数组)")
 
-    is_deleted: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now(),
                                                  nullable=False)

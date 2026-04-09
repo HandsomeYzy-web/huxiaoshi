@@ -198,3 +198,127 @@ async def get_all_kb_access(
     access_map = RoleRepo(db).get_kb_access_map(kb_ids)
     result = [{"kb_id": kid, "accessible_role_ids": rids} for kid, rids in access_map.items()]
     return success(data=result, message="获取成功")
+
+
+# ─── 模型配置管理 ─────────────────────────────────────────────
+
+from models.schemas.model_schema import (
+    ModelConfigCreate,
+    ModelConfigUpdate,
+    ModelConfigResponse,
+    ModelProviderInfo,
+    ModelActivateRequest,
+    ModelActivateResponse,
+)
+from services.model_config_service import model_config_service
+
+
+@router.get(
+    "/models",
+    response_model=UnifiedResponse[List[ModelConfigResponse]],
+    summary="获取模型配置列表",
+)
+async def list_model_configs(
+    model_type: str | None = None,
+    db: Session = Depends(get_db),
+    _admin: User = Depends(require_admin),
+):
+    return success(data=model_config_service.list_configs(db, model_type), message="获取成功")
+
+
+@router.get(
+    "/models/providers",
+    response_model=UnifiedResponse[List[ModelProviderInfo]],
+    summary="获取支持的模型供应商列表",
+)
+async def list_model_providers(
+    _admin: User = Depends(require_admin),
+):
+    return success(data=model_config_service.get_providers_info(), message="获取成功")
+
+
+@router.get(
+    "/models/{config_id}",
+    response_model=UnifiedResponse[ModelConfigResponse],
+    summary="获取单个模型配置详情",
+)
+async def get_model_config(
+    config_id: int = Path(...),
+    db: Session = Depends(get_db),
+    _admin: User = Depends(require_admin),
+):
+    return success(data=model_config_service.get_config(db, config_id), message="获取成功")
+
+
+@router.post(
+    "/models",
+    response_model=UnifiedResponse[ModelConfigResponse],
+    summary="创建模型配置",
+)
+async def create_model_config(
+    req: ModelConfigCreate,
+    db: Session = Depends(get_db),
+    _admin: User = Depends(require_admin),
+):
+    return success(data=model_config_service.create_config(db, req), message="模型配置创建成功")
+
+
+@router.put(
+    "/models/{config_id}",
+    response_model=UnifiedResponse[ModelConfigResponse],
+    summary="更新模型配置",
+)
+async def update_model_config(
+    req: ModelConfigUpdate,
+    config_id: int = Path(...),
+    db: Session = Depends(get_db),
+    _admin: User = Depends(require_admin),
+):
+    return success(data=model_config_service.update_config(db, config_id, req), message="模型配置更新成功")
+
+
+@router.post(
+    "/models/{config_id}/activate",
+    response_model=UnifiedResponse[ModelActivateResponse],
+    summary="激活指定模型配置（同类型只能激活一个）",
+)
+async def activate_model_config(
+    config_id: int = Path(...),
+    db: Session = Depends(get_db),
+    _admin: User = Depends(require_admin),
+):
+    result = model_config_service.activate_config(db, config_id)
+    msg = "模型已激活"
+    if result["warning"]:
+        msg = result["warning"]
+    return success(data=result, message=msg)
+
+
+@router.delete(
+    "/models/{config_id}",
+    response_model=UnifiedResponse[None],
+    summary="删除模型配置（激活状态不可删除）",
+)
+async def delete_model_config(
+    config_id: int = Path(...),
+    db: Session = Depends(get_db),
+    _admin: User = Depends(require_admin),
+):
+    model_config_service.delete_config(db, config_id)
+    return success(data=None, message="模型配置已删除")
+
+
+@router.post(
+    "/models/rebuild-all-kbs",
+    response_model=UnifiedResponse[dict],
+    summary="重建所有知识库向量（Embedding 模型切换后使用）",
+)
+async def rebuild_all_knowledge_bases(
+    db: Session = Depends(get_db),
+    _admin: User = Depends(require_admin),
+):
+    result = model_config_service.rebuild_all_knowledge_bases(db)
+    return success(
+        data=result,
+        message=f"已提交重建任务：{result['total_kbs']} 个知识库，{result['total_files']} 个文件排队处理中",
+    )

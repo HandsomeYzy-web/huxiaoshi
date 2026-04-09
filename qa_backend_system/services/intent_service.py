@@ -32,7 +32,7 @@ _CLASSIFY_PROMPT = ChatPromptTemplate.from_messages([
             "你是一个意图分类器。根据用户的问题，判断用户意图属于以下三类之一，只返回 JSON。\n\n"
             "意图类型：\n"
             "1. casual_chat — 闲聊、问候、与业务数据和文档无关的日常对话\n"
-            "2. data_query — 用户想查询、统计、对比具体的业务数据（如销售额、用户数、订单量等结构化数据）{data_query_hint}\n"
+            "2. data_query — 用户想查询、统计、对比具体的业务数据{data_query_hint}\n"
             "3. doc_search — 用户想从知识库文档中检索信息（如制度、规范、操作手册、技术文档等非结构化内容）\n\n"
             "返回格式（严格 JSON，不要多余内容）：\n"
             '{{"intent": "casual_chat|data_query|doc_search", "confidence": 0.0~1.0, "reason": "简短理由"}}'
@@ -49,13 +49,16 @@ class IntentService:
         self._model: ChatOpenAI | None = None
 
     def _get_model(self) -> ChatOpenAI | None:
-        if not (settings.EFFECTIVE_LLM_BASE_URL and settings.EFFECTIVE_LLM_API_KEY and settings.EFFECTIVE_LLM_MODEL):
-            return None
         if self._model is None:
+            from services.llm_service import llm_service
+            cfg = llm_service._resolve_llm_config()
+            if not cfg:
+                return None
+            base_url, api_key, model_name = cfg
             self._model = ChatOpenAI(
-                base_url=settings.EFFECTIVE_LLM_BASE_URL.rstrip("/"),
-                api_key=settings.EFFECTIVE_LLM_API_KEY,
-                model=settings.EFFECTIVE_LLM_MODEL,
+                base_url=base_url.rstrip("/"),
+                api_key=api_key,
+                model=model_name,
                 temperature=0.0,
                 request_timeout=30,
             )

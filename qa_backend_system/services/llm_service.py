@@ -1,8 +1,11 @@
+import threading
+
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_openai import ChatOpenAI
 
 from core.config import settings
+from core.database import SessionLocal
 
 
 class LLMService:
@@ -36,23 +39,43 @@ class LLMService:
         # Lazily initialized — avoids creating ChatOpenAI on every request
         self._model: ChatOpenAI | None = None
         self._streaming_model: ChatOpenAI | None = None
+        self._lock = threading.Lock()
+        # Cache the resolved config so we know which model_name to report
+        self._resolved_base_url: str | None = None
+        self._resolved_api_key: str | None = None
+        self._resolved_model_name: str | None = None
 
     # ------------------------------------------------------------------
     # Internal helpers
     # ------------------------------------------------------------------
 
-    def _is_configured(self) -> bool:
-        return bool(
-            settings.EFFECTIVE_LLM_BASE_URL
-            and settings.EFFECTIVE_LLM_API_KEY
-            and settings.EFFECTIVE_LLM_MODEL
-        )
+    def _resolve_llm_config(self) -> tuple[str, str, str] | None:
+        """Return (base_url, api_key, model_name) from DB active config."""
+        try:
+            db = SessionLocal()
+            try:
+                from repositories.model_config_repo import ModelConfigRepo
+                active = ModelConfigRepo(db).get_active("llm")
+                if active:
+                    return active.api_base_url, active.api_key, active.model_name
+            finally:
+                db.close()
+        except Exception:
+            pass
+        return None
 
-    def _build_model(self, streaming: bool) -> ChatOpenAI:
+    def _build_model(self, streaming: bool) -> ChatOpenAI | None:
+        cfg = self._resolve_llm_config()
+        if not cfg:
+            return None
+        base_url, api_key, model_name = cfg
+        self._resolved_base_url = base_url
+        self._resolved_api_key = api_key
+        self._resolved_model_name = model_name
         return ChatOpenAI(
-            base_url=settings.EFFECTIVE_LLM_BASE_URL.rstrip("/"),
-            api_key=settings.EFFECTIVE_LLM_API_KEY,
-            model=settings.EFFECTIVE_LLM_MODEL,
+            base_url=base_url.rstrip("/"),
+            api_key=api_key,
+            model=model_name,
             temperature=0.1,
             streaming=streaming,
             request_timeout=settings.LLM_TIMEOUT,
@@ -60,20 +83,20 @@ class LLMService:
 
     @property
     def model(self) -> ChatOpenAI | None:
-        """Non-streaming model, lazily initialized."""
-        if not self._is_configured():
-            return None
+        """Non-streaming model, lazily initialized (thread-safe)."""
         if self._model is None:
-            self._model = self._build_model(streaming=False)
+            with self._lock:
+                if self._model is None:
+                    self._model = self._build_model(streaming=False)
         return self._model
 
     @property
     def streaming_model(self) -> ChatOpenAI | None:
-        """Streaming model, lazily initialized."""
-        if not self._is_configured():
-            return None
+        """Streaming model, lazily initialized (thread-safe)."""
         if self._streaming_model is None:
-            self._streaming_model = self._build_model(streaming=True)
+            with self._lock:
+                if self._streaming_model is None:
+                    self._streaming_model = self._build_model(streaming=True)
         return self._streaming_model
 
     @staticmethod
@@ -102,7 +125,7 @@ class LLMService:
         answer = chain.invoke(
             {"question": question, "context_block": self._build_context_block(contexts)}
         )
-        return answer, settings.EFFECTIVE_LLM_MODEL
+        return answer, self._resolved_model_name
 
     def stream_answer(self, question: str, contexts: list[str]):
         """流式生成回答，生成器返回 (chunk: str, is_model_info: bool, model_name: str | None)"""
@@ -111,7 +134,7 @@ class LLMService:
             return
 
         # Signal the model name first
-        yield "", True, settings.EFFECTIVE_LLM_MODEL
+        yield "", True, self._resolved_model_name
 
         chain = self.prompt | self.streaming_model | self.output_parser
         for chunk in chain.stream(
@@ -131,7 +154,7 @@ class LLMService:
 
         chain = self.casual_prompt | self.model | self.output_parser
         answer = chain.invoke({"question": question})
-        return answer, settings.EFFECTIVE_LLM_MODEL
+        return answer, self._resolved_model_name
 
     def stream_casual_answer(self, question: str):
         """流式闲聊回答，生成器返回 (chunk: str, is_model_info: bool, model_name: str | None)"""
@@ -139,7 +162,7 @@ class LLMService:
             yield "我是知识库问答助手，目前 LLM 未配置，暂时无法闲聊。", False, None
             return
 
-        yield "", True, settings.EFFECTIVE_LLM_MODEL
+        yield "", True, self._resolved_model_name
 
         chain = self.casual_prompt | self.streaming_model | self.output_parser
         for chunk in chain.stream({"question": question}):

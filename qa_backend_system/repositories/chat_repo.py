@@ -26,7 +26,7 @@ class ChatRepo:
     def list_chat_sessions(self, user_id: int) -> list[ChatSession]:
         stmt = (
             select(ChatSession)
-            .where(ChatSession.user_id == user_id, ChatSession.is_deleted.is_(False))
+            .where(ChatSession.user_id == user_id)
             .order_by(ChatSession.updated_at.desc(), ChatSession.created_at.desc())
         )
         return list(self.db.scalars(stmt).all())
@@ -35,7 +35,6 @@ class ChatRepo:
         stmt = select(ChatSession).where(
             ChatSession.id == session_id,
             ChatSession.user_id == user_id,
-            ChatSession.is_deleted.is_(False),
         )
         return self.db.scalars(stmt).first()
 
@@ -63,13 +62,13 @@ class ChatRepo:
 
     # ── ChatSession 删除 ──────────────────────────────────────────────
 
-    def soft_delete_chat_session(self, session_id: int, user_id: int) -> bool:
+    def delete_chat_session(self, session_id: int, user_id: int) -> bool:
         session = self.get_chat_session(session_id, user_id)
         if not session:
             return False
-        session.is_deleted = True
+        self.db.delete(session)
         self.db.commit()
-        logger.info(f"Soft deleted chat session: session_id={session_id}")
+        logger.info(f"Hard deleted chat session: session_id={session_id}")
         return True
 
     # ── ChatMessage ───────────────────────────────────────────────────
