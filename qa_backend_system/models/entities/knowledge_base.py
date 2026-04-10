@@ -4,6 +4,7 @@ from sqlalchemy import BigInteger, Boolean, DateTime, Integer, String, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .base import Base  # 引入基类
+from .knowledge_file import KnowledgeFile
 
 
 class KnowledgeBase(Base):
@@ -25,6 +26,7 @@ class KnowledgeBase(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now(),
                                                  nullable=False, comment="更新时间")
 
-    # 注意：关联的类名必须使用字符串，避免与 knowledge_file.py 产生循环导入
-    files: Mapped[list["KnowledgeFile"]] = relationship("KnowledgeFile", back_populates="knowledge_base",
-                                                        cascade="all, delete-orphan")
+    files: Mapped[list[KnowledgeFile]] = relationship(
+        KnowledgeFile,
+        cascade="all, delete-orphan",
+    )

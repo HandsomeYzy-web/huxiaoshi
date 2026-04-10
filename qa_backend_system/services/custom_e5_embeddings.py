@@ -49,4 +49,4 @@ class CustomE5Embeddings(Embeddings):
         )
         response.raise_for_status()
         data = response.json()
-        return data["data"][0]["embedding"]
+        return list(data["data"][0]["embedding"])

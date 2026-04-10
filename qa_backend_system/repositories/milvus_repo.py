@@ -47,7 +47,9 @@ class MilvusRepo:
             FieldSchema(name="chunk_id", dtype=DataType.INT64, description="Chunk ID"),
             FieldSchema(name="kb_id", dtype=DataType.INT64, description="Knowledge Base ID"),
             FieldSchema(name="file_id", dtype=DataType.INT64, description="File ID"),
-            FieldSchema(name="text", dtype=DataType.VARCHAR, max_length=65535, description="Chunk text"),
+            FieldSchema(
+                name="text", dtype=DataType.VARCHAR, max_length=65535, description="Chunk text"
+            ),
             FieldSchema(name="embedding", dtype=DataType.FLOAT_VECTOR, dim=self.vector_dim),
         ]
         schema = CollectionSchema(fields=fields, description="QA document chunk collection")
@@ -118,7 +120,7 @@ class MilvusRepo:
             logger.info(f"Deleted Milvus vectors for file_id={file_id}")
         except Exception as e:
             logger.error(f"Milvus 删除失败 (file_id={file_id}): {e}")
-            raise ExternalServiceError(f"向量库删除失败: file_id={file_id}")
+            raise ExternalServiceError(f"向量库删除失败: file_id={file_id}") from e
 
     def delete_chunks_by_kb_id(self, kb_id: int):
         try:
@@ -128,7 +130,7 @@ class MilvusRepo:
             logger.info(f"Deleted Milvus vectors for kb_id={kb_id}")
         except Exception as e:
             logger.error(f"Milvus 删除失败 (kb_id={kb_id}): {e}")
-            raise ExternalServiceError(f"向量库删除失败: kb_id={kb_id}")
+            raise ExternalServiceError(f"向量库删除失败: kb_id={kb_id}") from e
 
 
 milvus_repo = MilvusRepo()

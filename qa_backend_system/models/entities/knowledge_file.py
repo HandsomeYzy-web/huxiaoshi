@@ -1,7 +1,7 @@
 from datetime import datetime
 
 from sqlalchemy import BigInteger, Boolean, DateTime, ForeignKey, Integer, String, Text, func
-from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.orm import Mapped, mapped_column
 
 from .base import Base  # 引入基类
 
@@ -33,4 +33,4 @@ class KnowledgeFile(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now(),
                                                  nullable=False)
 
-    knowledge_base: Mapped["KnowledgeBase"] = relationship("KnowledgeBase", back_populates="files")
+

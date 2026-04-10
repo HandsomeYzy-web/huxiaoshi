@@ -155,6 +155,12 @@ module = [
 ]
 ignore_missing_imports = true
 
+[[tool.mypy.overrides]]
+module = ["core.config"]
+# pydantic-settings reads required fields from env vars at runtime;
+# mypy cannot see this, so we suppress the spurious call-arg errors.
+disable_error_code = ["call-arg"]
+
 # ==========================================
 # Pytest 配置 (替换 pytest.ini)
 # ==========================================

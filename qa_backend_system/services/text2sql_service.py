@@ -15,6 +15,7 @@ from typing import Any
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_openai import ChatOpenAI
+from pydantic import SecretStr
 from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.engine import Engine
 
@@ -86,10 +87,10 @@ class Text2SQLService:
         if self._model is None:
             self._model = ChatOpenAI(
                 base_url=settings.EFFECTIVE_LLM_BASE_URL.rstrip("/"),
-                api_key=settings.EFFECTIVE_LLM_API_KEY,
+                api_key=SecretStr(settings.EFFECTIVE_LLM_API_KEY),
                 model=settings.EFFECTIVE_LLM_MODEL,
                 temperature=0.0,
-                request_timeout=settings.LLM_TIMEOUT,
+                timeout=settings.LLM_TIMEOUT,
             )
         return self._model
 
@@ -239,11 +240,11 @@ class Text2SQLService:
 
         streaming_model = ChatOpenAI(
             base_url=settings.EFFECTIVE_LLM_BASE_URL.rstrip("/"),
-            api_key=settings.EFFECTIVE_LLM_API_KEY,
+            api_key=SecretStr(settings.EFFECTIVE_LLM_API_KEY),
             model=settings.EFFECTIVE_LLM_MODEL,
             temperature=0.1,
             streaming=True,
-            request_timeout=settings.LLM_TIMEOUT,
+            timeout=settings.LLM_TIMEOUT,
         )
         chain = _SUMMARIZE_PROMPT | streaming_model | StrOutputParser()
         for chunk in chain.stream({

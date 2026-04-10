@@ -68,6 +68,8 @@ class RoleService:
         if existing and existing.id != role_id:
             raise DuplicateResourceError(f"角色名称 '{req.name}' 已存在")
         updated = repo.update_role(role_id, req.name, req.description or "")
+        if updated is None:
+            raise ResourceNotFoundError(f"角色 ID={role_id} 更新失败")
         perms = repo.get_role_permission_codes(role_id)
         return {"id": updated.id, "name": updated.name, "description": updated.description,
                 "is_system": updated.is_system, "created_at": updated.created_at, "permissions": list(perms)}

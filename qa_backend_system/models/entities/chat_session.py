@@ -4,6 +4,7 @@ from sqlalchemy import BigInteger, Boolean, DateTime, String, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .base import Base
+from .chat_message import ChatMessage
 
 
 class ChatSession(Base):
@@ -13,7 +14,9 @@ class ChatSession(Base):
     user_id: Mapped[int] = mapped_column(BigInteger, nullable=False, index=True)
     title: Mapped[str] = mapped_column(String(255), nullable=False, default="新对话")
     is_deleted: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(), nullable=False
+    )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime,
         server_default=func.now(),
@@ -21,9 +24,8 @@ class ChatSession(Base):
         nullable=False,
     )
 
-    messages: Mapped[list["ChatMessage"]] = relationship(
-        "ChatMessage",
-        back_populates="session",
+    messages: Mapped[list[ChatMessage]] = relationship(
+        ChatMessage,
         cascade="all, delete-orphan",
-        order_by="ChatMessage.created_at.asc()",
+        order_by=ChatMessage.created_at.asc(),
     )

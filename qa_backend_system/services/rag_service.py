@@ -80,7 +80,7 @@ class RAGService:
                 "text": chunk.content,
                 "embedding": vector,
             }
-            for chunk, vector in zip(saved_chunks, vectors)
+            for chunk, vector in zip(saved_chunks, vectors, strict=False)
         ]
         milvus_repo.insert_chunks(vector_rows)
         logger.info(f"Indexed {len(saved_chunks)} chunks for file: {file_entity.file_name}")
@@ -158,7 +158,7 @@ class RAGService:
             partition_kwargs["languages"] = ["chi_sim", "eng"]
 
         try:
-            elements = partition(**partition_kwargs)
+            elements = partition(**partition_kwargs)  # type: ignore[arg-type]
         except Exception as e:
             logger.error(f"Partition failed for {file_entity.file_name}: {e}")
             # Fallback: try basic auto strategy

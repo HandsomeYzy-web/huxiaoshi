@@ -13,6 +13,7 @@ import json
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_openai import ChatOpenAI
+from pydantic import SecretStr
 
 from core.config import settings
 from core.logger import logger
@@ -54,10 +55,10 @@ class IntentService:
         if self._model is None:
             self._model = ChatOpenAI(
                 base_url=settings.EFFECTIVE_LLM_BASE_URL.rstrip("/"),
-                api_key=settings.EFFECTIVE_LLM_API_KEY,
+                api_key=SecretStr(settings.EFFECTIVE_LLM_API_KEY),
                 model=settings.EFFECTIVE_LLM_MODEL,
                 temperature=0.0,
-                request_timeout=30,
+                timeout=30,
             )
         return self._model
 

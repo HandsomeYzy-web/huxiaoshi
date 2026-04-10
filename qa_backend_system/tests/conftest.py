@@ -97,7 +97,7 @@ def register_and_login(client: TestClient, username: str = "testuser", password:
         "password": password,
     })
     assert resp.status_code == 200
-    return resp.json()["data"]["access_token"]
+    return str(resp.json()["data"]["access_token"])
 
 
 @pytest.fixture

@@ -30,7 +30,7 @@ class RedisRepo:
         """获取 JSON 并解析为字典"""
         data = self.client.get(key)
         if data:
-            return json.loads(data)
+            return dict(json.loads(data))
         return None
 
     def delete(self, key: str):

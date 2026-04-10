@@ -18,7 +18,7 @@ class Settings(BaseSettings):
     MYSQL_PORT: str
     MYSQL_DB: str
 
-    @computed_field
+    @computed_field  # type: ignore[prop-decorator]
     @property
     def SQLALCHEMY_DATABASE_URI(self) -> str:
         return (
@@ -32,7 +32,7 @@ class Settings(BaseSettings):
     REDIS_PASSWORD: str
     REDIS_DB: int = 0
 
-    @computed_field
+    @computed_field  # type: ignore[prop-decorator]
     @property
     def REDIS_URI(self) -> str:
         if self.REDIS_PASSWORD:
@@ -93,22 +93,22 @@ class Settings(BaseSettings):
         "json", "xml", "rst", "rtf", "epub",
     ]
 
-    @computed_field
+    @computed_field  # type: ignore[prop-decorator]
     @property
     def MAX_UPLOAD_FILE_SIZE_BYTES(self) -> int:
         return self.MAX_UPLOAD_FILE_SIZE_MB * 1024 * 1024
 
-    @computed_field
+    @computed_field  # type: ignore[prop-decorator]
     @property
     def EFFECTIVE_LLM_BASE_URL(self) -> str:
         return self.LLM_BASE_URL or self.DASHSCOPE_BASE_URL
 
-    @computed_field
+    @computed_field  # type: ignore[prop-decorator]
     @property
     def EFFECTIVE_LLM_API_KEY(self) -> str:
         return self.LLM_API_KEY or self.DASHSCOPE_API_KEY
 
-    @computed_field
+    @computed_field  # type: ignore[prop-decorator]
     @property
     def EFFECTIVE_LLM_MODEL(self) -> str:
         return self.LLM_MODEL or self.DASHSCOPE_MODEL_NAME

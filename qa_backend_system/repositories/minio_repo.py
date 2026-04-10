@@ -66,7 +66,7 @@ class MinioRepo:
             logger.debug(f"MinIO 文件已删除: {object_name}")
         except Exception as e:
             logger.error(f"MinIO 删除文件失败 [{object_name}]: {e}")
-            raise ExternalServiceError(f"对象存储删除失败: {object_name}")
+            raise ExternalServiceError(f"对象存储删除失败: {object_name}") from e
 
     def delete_files_with_prefix(self, prefix: str):
         """删除指定前缀下的所有对象（用于删除整个知识库目录）"""
@@ -77,6 +77,6 @@ class MinioRepo:
             logger.info(f"MinIO 前缀 '{prefix}' 下所有文件已删除")
         except Exception as e:
             logger.error(f"MinIO 批量删除失败 [prefix={prefix}]: {e}")
-            raise ExternalServiceError(f"对象存储批量删除失败: {prefix}")
+            raise ExternalServiceError(f"对象存储批量删除失败: {prefix}") from e
 
 minio_repo = MinioRepo() # 实例化单例

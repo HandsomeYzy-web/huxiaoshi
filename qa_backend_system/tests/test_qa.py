@@ -24,7 +24,7 @@ KB_PAYLOAD = {
 @pytest.fixture
 def kb_id(client: TestClient, auth_headers: dict) -> int:
     resp = client.post(f"{PREFIX}/kb", json=KB_PAYLOAD, headers=auth_headers)
-    return resp.json()["data"]["id"]
+    return int(resp.json()["data"]["id"])
 
 
 class TestQAAsk:

@@ -1,7 +1,7 @@
 from datetime import datetime
 
 from sqlalchemy import BigInteger, DateTime, ForeignKey, Integer, String, Text, func
-from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.orm import Mapped, mapped_column
 
 from .base import Base
 
@@ -26,11 +26,15 @@ class ChatMessage(Base):
     # intent: casual_chat / data_query / doc_search
     intent: Mapped[str | None] = mapped_column(String(32), nullable=True, comment="意图类型")
     # 对于 data_query: 存储生成的 SQL
-    generated_sql: Mapped[str | None] = mapped_column(Text, nullable=True, comment="Text2SQL 生成的 SQL")
+    generated_sql: Mapped[str | None] = mapped_column(
+        Text, nullable=True, comment="Text2SQL 生成的 SQL"
+    )
     # 对于 data_query: 存储 SQL 执行结果 (JSON)
     sql_result_json: Mapped[str | None] = mapped_column(Text, nullable=True, comment="SQL 查询结果")
 
-    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(), nullable=False
+    )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime,
         server_default=func.now(),
@@ -38,4 +42,4 @@ class ChatMessage(Base):
         nullable=False,
     )
 
-    session: Mapped["ChatSession"] = relationship("ChatSession", back_populates="messages")
+

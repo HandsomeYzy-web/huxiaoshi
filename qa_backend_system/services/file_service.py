@@ -62,11 +62,11 @@ class FileService:
                     continue
 
                 file_bytes = await file.read()
-                file_ext = os.path.splitext(file.filename)[1].lower().strip('.')
+                file_ext = os.path.splitext(file.filename or "")[1].lower().strip('.')
                 file_size = len(file_bytes)
 
                 object_name = f"kb_{kb_id}/{md5_str}/{file.filename}"
-                minio_repo.upload_file_bytes(object_name, file_bytes, file.content_type)
+                minio_repo.upload_file_bytes(object_name, file_bytes, file.content_type or "application/octet-stream")
 
                 new_file = KnowledgeFile(
                     kb_id=kb_id,
@@ -90,7 +90,7 @@ class FileService:
                 results.append({
                     "filename": file.filename,
                     "status": "success",
-                    "file_id": new_file.id
+                    "file_id": str(new_file.id)
                 })
 
             except Exception as e:

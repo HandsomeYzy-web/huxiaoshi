@@ -1,6 +1,7 @@
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_openai import ChatOpenAI
+from pydantic import SecretStr
 
 from core.config import settings
 
@@ -51,11 +52,11 @@ class LLMService:
     def _build_model(self, streaming: bool) -> ChatOpenAI:
         return ChatOpenAI(
             base_url=settings.EFFECTIVE_LLM_BASE_URL.rstrip("/"),
-            api_key=settings.EFFECTIVE_LLM_API_KEY,
+            api_key=SecretStr(settings.EFFECTIVE_LLM_API_KEY),
             model=settings.EFFECTIVE_LLM_MODEL,
             temperature=0.1,
             streaming=streaming,
-            request_timeout=settings.LLM_TIMEOUT,
+            timeout=settings.LLM_TIMEOUT,
         )
 
     @property

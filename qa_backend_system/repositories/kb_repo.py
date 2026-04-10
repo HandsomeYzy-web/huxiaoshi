@@ -2,6 +2,7 @@ from collections.abc import Iterable
 
 from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
+from sqlalchemy.sql.elements import ColumnElement
 
 from core.logger import logger
 from models.entities import DocumentChunk, KnowledgeBase
@@ -26,7 +27,7 @@ class KBRepo:
 
     def get_kb_by_id(self, kb_id: int, user_id: int | None = None) -> KnowledgeBase | None:
         """按 ID 查询知识库；传入 user_id 时额外校验归属。"""
-        conditions = [KnowledgeBase.id == kb_id, KnowledgeBase.is_deleted.is_(False)]
+        conditions: list[ColumnElement[bool]] = [KnowledgeBase.id == kb_id, KnowledgeBase.is_deleted.is_(False)]
         if user_id is not None:
             conditions.append(KnowledgeBase.user_id == user_id)
         stmt = select(KnowledgeBase).where(*conditions)
@@ -34,7 +35,7 @@ class KBRepo:
 
     def get_all_kbs(self, user_id: int | None = None) -> list[KnowledgeBase]:
         """查询知识库列表；传入 user_id 时过滤归属，否则返回全部（跨用户场景）。"""
-        conditions = [KnowledgeBase.is_deleted.is_(False)]
+        conditions: list[ColumnElement[bool]] = [KnowledgeBase.is_deleted.is_(False)]
         if user_id is not None:
             conditions.append(KnowledgeBase.user_id == user_id)
         stmt = (

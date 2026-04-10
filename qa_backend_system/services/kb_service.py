@@ -39,14 +39,14 @@ class KBService:
         try:
             created_kb = repo.create_kb(kb_entity)
             return created_kb
-        except IntegrityError:
+        except IntegrityError as e:
             db.rollback()
             logger.warning(f"创建知识库失败，名称已存在: {kb_in.name}")
-            raise DuplicateResourceError("该知识库名称已存在，请换一个名称")
+            raise DuplicateResourceError("该知识库名称已存在，请换一个名称") from e
         except Exception as e:
             db.rollback()
             logger.error(f"创建知识库时发生未知错误: {e}")
-            raise BusinessError("服务器内部错误，请联系管理员")
+            raise BusinessError("服务器内部错误，请联系管理员") from e
 
     def list_kbs(self, db: Session, user_id: int) -> list[KnowledgeBase]:
         """
@@ -77,6 +77,8 @@ class KBService:
             raise PermissionDeniedError("只有知识库创建者或管理员可以修改知识库")
         update_data = kb_update.model_dump(exclude_unset=True)
         updated = repo.update_kb(kb_id, update_data)
+        if updated is None:
+            raise ResourceNotFoundError(f"知识库 ID={kb_id} 更新失败")
         logger.info(f"知识库更新: ID={kb_id}, fields={list(update_data.keys())}")
         return updated
 

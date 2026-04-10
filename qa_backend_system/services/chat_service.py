@@ -160,6 +160,8 @@ class ChatService:
             repo.update_chat_session_title(session.id, self._build_title(question))
         repo.touch_chat_session(session.id)
         refreshed_session = repo.get_chat_session(session.id, user_id)
+        if refreshed_session is None:
+            raise RuntimeError(f"会话 ID={session.id} 刷新失败")
         yield _sse("session_info", {
             "id": refreshed_session.id,
             "title": refreshed_session.title,
