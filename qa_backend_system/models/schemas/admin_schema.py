@@ -1,3 +1,5 @@
+"""管理员模块数据模型：包含角色 CRUD、权限分配、用户管理、知识库访问控制等接口的请求/响应模型。"""
+
 from datetime import datetime
 from typing import Optional
 from pydantic import BaseModel, Field, ConfigDict

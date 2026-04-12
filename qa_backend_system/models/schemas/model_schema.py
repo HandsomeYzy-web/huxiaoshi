@@ -1,3 +1,5 @@
+"""模型配置模块数据模型：包含模型配置的 CRUD、激活、供应商信息等接口模型。"""
+
 from datetime import datetime
 from typing import Optional, List
 

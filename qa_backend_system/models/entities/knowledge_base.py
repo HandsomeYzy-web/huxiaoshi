@@ -1,9 +1,11 @@
+"""知识库实体：存储知识库的基本信息、切分策略、检索参数等配置，并关联其下属文件。"""
+
 from datetime import datetime
 from typing import List, Optional
 from sqlalchemy import String, Integer, BigInteger, Boolean, DateTime, Text, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from .base import Base  # 引入基类
+from .base import Base
 
 
 class KnowledgeBase(Base):

@@ -1,3 +1,5 @@
+"""聊天仓储层：提供 ChatSession（聊天会话）和 ChatMessage（聊天消息）的数据库增删改查操作。"""
+
 from typing import Optional
 
 from sqlalchemy import func, select, update

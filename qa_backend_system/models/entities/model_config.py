@@ -1,3 +1,5 @@
+"""模型配置实体：存储 LLM、Embedding、Rerank 等模型的连接信息和激活状态。"""
+
 from datetime import datetime
 from typing import Optional
 

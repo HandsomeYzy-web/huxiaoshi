@@ -1,3 +1,8 @@
+"""
+MinIO 对象存储仓储层：封装文件上传、下载、预签名 URL 生成、删除等操作。
+文件上传到 MinIO 后由 Celery 异步任务拉取解析。
+"""
+
 import io
 from minio import Minio
 from datetime import timedelta
@@ -16,9 +21,6 @@ class MinioRepo:
             secure=settings.MINIO_SECURE
         )
         self.bucket_name = settings.MINIO_BUCKET_NAME
-
-    def init(self):
-        """启动时显式初始化：确保 Bucket 存在。"""
         self._ensure_bucket_exists()
 
     def _ensure_bucket_exists(self):

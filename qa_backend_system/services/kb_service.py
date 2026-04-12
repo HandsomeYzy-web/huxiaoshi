@@ -1,3 +1,5 @@
+"""知识库服务层：处理知识库的创建、列表查询（基于角色权限过滤）、更新、删除（级联清理 Milvus、MinIO、MySQL）。"""
+
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
 import json

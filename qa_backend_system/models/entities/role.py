@@ -1,3 +1,12 @@
+"""
+角色与权限实体模块：
+- Role: 角色表（管理员、普通用户、访客等）
+- UserRole: 用户-角色关联表（多对多）
+- Permission: 权限定义表
+- RolePermission: 角色-权限关联表（多对多）
+- KBRoleAccess: 知识库-角色访问控制表
+"""
+
 from datetime import datetime
 from typing import List
 

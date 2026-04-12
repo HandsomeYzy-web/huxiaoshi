@@ -1,3 +1,5 @@
+"""配置文件：集中管理所有系统配置项，通过 .env 文件或环境变量注入。"""
+
 from typing import List
 
 from pydantic import computed_field
@@ -5,6 +7,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
+    """系统全局配置类，基于 pydantic-settings 自动从环境变量/.env 文件读取配置。"""
     PROJECT_NAME: str = "QA Backend System"
     VERSION: str = "1.0.0"
     API_V1_STR: str = "/api/v1"
@@ -22,6 +25,7 @@ class Settings(BaseSettings):
     @computed_field
     @property
     def SQLALCHEMY_DATABASE_URI(self) -> str:
+        """根据 MySQL 连接参数动态拼接 SQLAlchemy 数据库连接 URI。"""
         return (
             f"mysql+pymysql://{self.MYSQL_USER}:{self.MYSQL_PASSWORD}"
             f"@{self.MYSQL_HOST}:{self.MYSQL_PORT}/{self.MYSQL_DB}?charset=utf8mb4"
@@ -36,6 +40,7 @@ class Settings(BaseSettings):
     @computed_field
     @property
     def REDIS_URI(self) -> str:
+        """根据 Redis 连接参数动态拼接 Redis 连接 URI。"""
         if self.REDIS_PASSWORD:
             return f"redis://:{self.REDIS_PASSWORD}@{self.REDIS_HOST}:{self.REDIS_PORT}/{self.REDIS_DB}"
         return f"redis://{self.REDIS_HOST}:{self.REDIS_PORT}/{self.REDIS_DB}"
@@ -78,6 +83,7 @@ class Settings(BaseSettings):
     @computed_field
     @property
     def MAX_UPLOAD_FILE_SIZE_BYTES(self) -> int:
+        """将文件上传大小限制从 MB 转换为字节。"""
         return self.MAX_UPLOAD_FILE_SIZE_MB * 1024 * 1024
 
     model_config = SettingsConfigDict(
@@ -88,4 +94,5 @@ class Settings(BaseSettings):
     )
 
 
+# 全局配置单例，供项目各模块引用
 settings = Settings()

@@ -1,8 +1,8 @@
 """
-Shared embeddings singleton.
+Embedding 单例服务：统一管理 OpenAIEmbeddings 实例的获取和初始化。
 
-Uses langchain_openai.OpenAIEmbeddings which is compatible with any
-OpenAI-compatible embedding API (dashscope, ollama, jina, etc.).
+使用 langchain_openai.OpenAIEmbeddings，兼容任意 OpenAI 兼容的
+Embedding API（dashscope、ollama、jina 等）。
 The vector dimension is auto-detected on first use by embedding a probe text.
 """
 from __future__ import annotations

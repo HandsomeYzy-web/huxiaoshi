@@ -1,3 +1,5 @@
+"""统一响应封装模块：提供 success() 和 error() 快捷函数，确保所有 API 返回统一的 JSON 格式。"""
+
 from typing import Any, Generic, Optional, TypeVar
 from pydantic import BaseModel, Field
 from fastapi.responses import JSONResponse

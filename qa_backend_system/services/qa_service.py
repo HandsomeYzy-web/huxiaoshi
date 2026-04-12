@@ -1,8 +1,8 @@
 """
-QA Service — hybrid retrieval-augmented generation pipeline.
+QA 服务层 — 混合检索增强生成（RAG）管道。
 
-Uses a combination of vector search (Milvus) and BM25-style keyword search
-(MySQL) to produce a merged, deduplicated, and reranked result set.
+结合向量查询（Milvus）和 BM25 关键词搜索（MySQL），
+通过 RRF 融合、去重、Rerank 精排后返回最终结果集。
 
 The retrieval step is encapsulated as a LangChain RunnableLambda so it can be
 composed into any LCEL chain.

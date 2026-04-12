@@ -1,5 +1,9 @@
+"""
+角色服务层：处理角色 CRUD、权限分配、用户-角色绑定、知识库访问控制、权限校验等业务逻辑。
+含系统初始化时的默认角色和权限同步。
+"""
+
 from sqlalchemy.orm import Session
-from sqlalchemy.exc import IntegrityError
 
 from core.exceptions import ResourceNotFoundError, DuplicateResourceError, PermissionDeniedError
 from core.logger import logger

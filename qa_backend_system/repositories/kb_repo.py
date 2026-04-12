@@ -1,3 +1,5 @@
+"""知识库仓储层：提供 KnowledgeBase（知识库）的数据库增删改查操作，包括级联删除关联文件和分段。"""
+
 from typing import Iterable, Optional
 
 from sqlalchemy import delete, select

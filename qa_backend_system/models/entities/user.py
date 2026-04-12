@@ -1,3 +1,5 @@
+"""用户实体：存储系统用户的基本信息，包括用户名、邮箱、密码哈希、管理员标志等。"""
+
 from datetime import datetime
 from typing import List
 

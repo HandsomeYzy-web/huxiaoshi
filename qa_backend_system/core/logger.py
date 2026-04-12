@@ -1,3 +1,5 @@
+"""日志配置模块：基于 loguru 配置控制台、常规日志文件、错误日志文件三路输出。"""
+
 import os
 import sys
 from loguru import logger
@@ -7,6 +9,7 @@ LOG_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "logs")
 os.makedirs(LOG_DIR, exist_ok=True)
 
 def setup_logger():
+    """初始化日志系统：配置控制台彩色输出、Info 日志文件、Error 独立日志文件。"""
     # 移除默认的控制台输出，防止重复打印
     logger.remove()
 

@@ -1,3 +1,5 @@
+"""文件服务层：处理文件批量上传（MD5 去重、存储到 MinIO、触发异步解析任务）和文件删除（级联清理 Milvus、MinIO、MySQL）。"""
+
 import hashlib
 import os
 from typing import List, Optional

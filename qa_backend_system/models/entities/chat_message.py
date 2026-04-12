@@ -1,3 +1,5 @@
+"""聊天消息实体：存储每条聊天对话中的用户提问和助手回复记录，包含意图分类、SQL 生成等三链路扩展字段。"""
+
 from datetime import datetime
 from typing import Optional
 

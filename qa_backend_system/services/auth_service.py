@@ -1,3 +1,5 @@
+"""认证服务层：处理用户注册（用户名/邮箱去重 + 密码哈希）和登录（密码验证 + JWT 令牌生成）。"""
+
 from sqlalchemy.orm import Session
 
 from core.exceptions import AuthenticationError, DuplicateResourceError

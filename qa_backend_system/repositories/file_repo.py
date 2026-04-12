@@ -1,3 +1,5 @@
+"""文件仓储层：提供 KnowledgeFile（知识库文件）和 DocumentChunk（文档分段）的数据库增删改查操作。"""
+
 from typing import Iterable, Optional
 
 from sqlalchemy import delete, func, select, update
@@ -129,6 +131,7 @@ class FileRepo:
         )
         return list(self.db.scalars(stmt).all()), total
 
+    # TODO:引入elasticsearch 后可以废弃基于 MySQL LIKE 的关键词搜索，改为 ES 搜索并返回对应的 chunk_id 列表，再批量查询 DocumentChunk 实体返回给上层。
     @staticmethod
     def _escape_like(keyword: str) -> str:
         """Escape special LIKE characters to prevent injection."""

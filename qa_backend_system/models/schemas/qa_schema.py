@@ -1,9 +1,12 @@
+"""问答模块数据模型：包含知识库问答、检索测试、跨库聊天等接口的请求/响应模型。"""
+
 from typing import List, Optional
 
 from pydantic import BaseModel, Field
 
 
 class QAAskRequest(BaseModel):
+    """知识库问答请求：指定知识库 ID 和问题进行问答或检索测试。"""
     kb_id: Optional[int] = Field(None, description="Single knowledge base ID")
     kb_ids: List[int] = Field(default_factory=list, description="Knowledge base IDs")
     question: str = Field(..., min_length=1, max_length=4000, description="User question")

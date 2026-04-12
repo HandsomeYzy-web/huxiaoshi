@@ -1,3 +1,5 @@
+"""文件模块数据模型：包含文件上传、切分策略、分段预览、分页查询等接口模型。"""
+
 from pydantic import BaseModel, Field, ConfigDict, model_validator
 from typing import Optional, List
 from datetime import datetime

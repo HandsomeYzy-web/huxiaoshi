@@ -1,3 +1,8 @@
+"""
+Milvus 向量数据库仓储层：封装向量集合的创建、插入、检索、删除等操作。
+每个知识库对应一个独立的 Milvus collection。
+"""
+
 from pymilvus import Collection, CollectionSchema, DataType, FieldSchema, MilvusClient, utility
 
 from core.config import settings
@@ -7,7 +12,7 @@ from core.milvus import DEFAULT_MILVUS_ALIAS, ensure_milvus_connection
 
 
 class MilvusRepo:
-    """Milvus access wrapper — each knowledge base gets its own collection."""
+    """Milvus 向量数据库访问封装 — 每个知识库拥有独立的 collection。"""
 
     def __init__(self):
         self.alias = DEFAULT_MILVUS_ALIAS
@@ -15,17 +20,17 @@ class MilvusRepo:
 
     @property
     def vector_dim(self) -> int:
-        """Get vector dimension from active embedding config's extra_params."""
+        """从当前激活的 Embedding 模型配置中获取向量维度。"""
         from services.embeddings import get_embedding_vector_dim
         return get_embedding_vector_dim()
 
     @staticmethod
     def _collection_name(kb_id: int) -> str:
-        """Generate collection name for a knowledge base."""
+        """根据知识库 ID 生成对应的 Milvus collection 名称。"""
         return f"kb_collection_{kb_id}"
 
     def ensure_collection(self, kb_id: int):
-        """Ensure the collection for the given KB exists."""
+        """确保指定知识库的 Milvus collection 已存在，不存在则自动创建。"""
         collection_name = self._collection_name(kb_id)
         try:
             ensure_milvus_connection(self.alias)
@@ -86,6 +91,7 @@ class MilvusRepo:
             )
 
     def insert_chunks(self, kb_id: int, rows: list[dict]):
+        """将文档分段的向量数据批量插入到 Milvus collection 中。"""
         if not rows:
             return
         self.ensure_collection(kb_id)
@@ -93,6 +99,7 @@ class MilvusRepo:
         self.client.insert(collection_name=collection_name, data=rows)
 
     def search_chunks(self, kb_id: int, query_vector: list[float], top_k: int = 5) -> list[dict]:
+        """在指定知识库的 collection 中进行向量相似度检索。"""
         collection_name = self._collection_name(kb_id)
         self.ensure_collection(kb_id)
         self._load_collection(collection_name)
@@ -105,7 +112,7 @@ class MilvusRepo:
         return results[0] if results else []
 
     def search_chunks_across_kbs(self, kb_ids: list[int], query_vector: list[float], top_k: int = 8) -> list[dict]:
-        """Search across multiple KB collections and merge results."""
+        """跨多个知识库的 collection 进行向量检索并合并排序结果。"""
         all_results = []
         for kid in kb_ids:
             try:
@@ -118,6 +125,7 @@ class MilvusRepo:
         return all_results[:top_k]
 
     def delete_chunks_by_file_id(self, kb_id: int, file_id: int):
+        """删除指定文件在 Milvus 中的所有向量数据。"""
         try:
             collection_name = self._collection_name(kb_id)
             self.ensure_collection(kb_id)
@@ -129,7 +137,7 @@ class MilvusRepo:
             raise ExternalServiceError(f"向量库删除失败: file_id={file_id}")
 
     def delete_chunks_by_kb_id(self, kb_id: int):
-        """Drop the entire collection for the KB."""
+        """删除整个知识库对应的 Milvus collection（用于知识库删除或重建）。"""
         try:
             collection_name = self._collection_name(kb_id)
             ensure_milvus_connection(self.alias)

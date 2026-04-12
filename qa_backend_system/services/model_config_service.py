@@ -1,3 +1,5 @@
+"""模型配置服务层：管理 LLM/Embedding/Rerank 模型配置的 CRUD、激活切换、缓存失效、知识库向量重建等。"""
+
 from sqlalchemy.orm import Session
 
 from core.exceptions import ResourceNotFoundError, DuplicateResourceError, BusinessError

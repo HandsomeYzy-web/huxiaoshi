@@ -1,3 +1,8 @@
+"""
+RAG 服务层：文档解析与向量索引管道。
+包含文件文本提取（支持 PDF/DOCX/XLSX/图片 OCR 等）、文本切分、Embedding 向量化、Milvus 入库。
+"""
+
 import json
 import os
 import tempfile
@@ -9,7 +14,6 @@ from sqlalchemy.orm import Session
 from unstructured.documents.elements import Image, Table
 from unstructured.partition.auto import partition
 
-from core.config import settings
 from core.logger import logger
 from models.entities import DocumentChunk, KnowledgeBase, KnowledgeFile
 from repositories.file_repo import FileRepo

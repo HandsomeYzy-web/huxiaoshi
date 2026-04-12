@@ -1,3 +1,5 @@
+"""模型配置仓储层：提供 ModelConfig（模型配置）的数据库增删改查操作，支持同类型模型的激活/停用切换。"""
+
 from typing import Optional
 
 from sqlalchemy import select, update

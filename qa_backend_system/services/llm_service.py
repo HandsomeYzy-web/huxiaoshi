@@ -1,3 +1,9 @@
+"""
+LLM 服务层：统一管理 ChatOpenAI 实例的创建与缓存，
+提供同步调用、流式调用、带 JSON Schema 约束的调用等能力。
+支持任意 OpenAI 兼容接口（dashscope、ollama、DeepSeek 等）。
+"""
+
 import threading
 
 from langchain_core.output_parsers import StrOutputParser

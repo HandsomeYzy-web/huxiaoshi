@@ -1,3 +1,5 @@
+"""聊天模块数据模型：包含聊天会话、消息、流式响应等接口模型，支持三链路意图分类扩展。"""
+
 from datetime import datetime
 from typing import List, Optional
 

@@ -1,3 +1,5 @@
+"""聊天会话实体：表示一个用户的聊天会话，包含多条消息，支持重命名和时间戳更新。"""
+
 from datetime import datetime
 from typing import List
 

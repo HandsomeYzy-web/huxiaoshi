@@ -1,3 +1,5 @@
+"""知识库模块数据模型：包含知识库创建、更新、响应等接口模型。"""
+
 from pydantic import BaseModel, Field, ConfigDict, model_validator
 from typing import Optional, List
 from datetime import datetime

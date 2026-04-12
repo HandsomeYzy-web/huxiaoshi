@@ -1,3 +1,5 @@
+"""用户仓储层：提供 User（用户）的数据库增删改查操作，支持按用户名、邮箱、ID 查询。"""
+
 from typing import Optional
 
 from sqlalchemy import select

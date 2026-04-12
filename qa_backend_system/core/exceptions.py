@@ -1,3 +1,10 @@
+"""
+全局异常定义与异常处理器注册模块。
+
+本文件定义了业务层的自定义异常类（不含 HTTP 语义），
+以及 FastAPI 全局异常捕获器，确保所有报错以统一 JSON 格式返回前端。
+"""
+
 from fastapi import Request, FastAPI
 from fastapi.exceptions import RequestValidationError
 from starlette.exceptions import HTTPException as StarletteHTTPException
@@ -13,7 +20,7 @@ from core.response import error
 # ============================================================
 
 class AppException(Exception):
-    """Base class for all domain-level exceptions."""
+    """基础业务异常类：所有自定义异常的父类，携带业务状态码和错误消息。"""
 
     def __init__(self, message: str, code: int = 400):
         self.message = message
@@ -22,42 +29,42 @@ class AppException(Exception):
 
 
 class ResourceNotFoundError(AppException):
-    """Resource does not exist."""
+    """资源不存在异常（404）。"""
 
     def __init__(self, message: str):
         super().__init__(message, code=404)
 
 
 class DuplicateResourceError(AppException):
-    """Uniqueness constraint violated (e.g. duplicate name)."""
+    """资源重复异常（如重复名称）。"""
 
     def __init__(self, message: str):
         super().__init__(message, code=400)
 
 
 class BusinessError(AppException):
-    """General business-rule violation."""
+    """通用业务规则违规异常。"""
 
     def __init__(self, message: str):
         super().__init__(message, code=400)
 
 
 class AuthenticationError(AppException):
-    """Authentication failed (missing or invalid token)."""
+    """认证失败异常（缺少或无效的令牌）。"""
 
     def __init__(self, message: str = "认证失败"):
         super().__init__(message, code=401)
 
 
 class PermissionDeniedError(AppException):
-    """Authenticated but not authorized for the resource."""
+    """权限不足异常（已认证但无权访问该资源）。"""
 
     def __init__(self, message: str = "无权限访问该资源"):
         super().__init__(message, code=403)
 
 
 class ExternalServiceError(AppException):
-    """External service (MinIO, Milvus, etc.) call failed."""
+    """外部服务调用失败异常（MinIO、Milvus 等）。"""
 
     def __init__(self, message: str):
         super().__init__(message, code=502)

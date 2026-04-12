@@ -1,9 +1,11 @@
+"""知识库文件实体：存储上传到知识库的文件元信息，包括文件大小、MD5、MinIO 存储路径、解析状态、自定义切分策略等。"""
+
 from datetime import datetime
 from typing import Optional
 from sqlalchemy import String, Integer, BigInteger, Text, DateTime, ForeignKey, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from .base import Base  # 引入基类
+from .base import Base
 
 
 class KnowledgeFile(Base):

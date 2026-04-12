@@ -1,3 +1,5 @@
+"""认证模块数据模型：包含用户注册、登录、令牌响应、用户信息等接口模型。"""
+
 from typing import List
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
 

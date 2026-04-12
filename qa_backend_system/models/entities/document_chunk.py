@@ -1,3 +1,5 @@
+"""文档分段实体：存储知识库文件解析后的文本分段，每条记录对应 Milvus 中的一个向量。"""
+
 from datetime import datetime
 
 from sqlalchemy import BigInteger, DateTime, ForeignKey, Integer, Text, func

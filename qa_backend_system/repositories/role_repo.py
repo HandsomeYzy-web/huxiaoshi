@@ -1,3 +1,8 @@
+"""
+角色与权限仓储层：提供 Role、UserRole、Permission、RolePermission、KBRoleAccess 的数据库增删改查操作。
+包含角色 CRUD、用户-角色分配、权限管理、知识库访问控制等功能。
+"""
+
 from typing import Optional
 
 from sqlalchemy import select, delete
