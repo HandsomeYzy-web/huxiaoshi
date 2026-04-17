@@ -8,6 +8,7 @@ import 'element-ai-vue/dist/index.css'
 import App from './App.vue'
 import router from './router'
 import './style.css'
+import { permissionDirective } from './directives/permission'
 
 const app = createApp(App)
 const pinia = createPinia()
@@ -16,9 +17,11 @@ app.use(pinia)
 app.use(router)
 app.use(ElementPlus)
 app.use(ElementAIVue)
+app.directive('permission', permissionDirective)
 
 // 应用启动时初始化用户信息
 import { useAuthStore } from './stores/auth'
+
 const authStore = useAuthStore()
 authStore.init()
 

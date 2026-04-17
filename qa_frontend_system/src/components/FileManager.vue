@@ -7,7 +7,12 @@
       </div>
       <div class="header-actions">
         <el-tag v-if="kbId" type="success" effect="plain">当前知识库 ID {{ kbId }}</el-tag>
-        <el-button type="primary" :disabled="!kbId" @click="uploadDialogVisible = true">上传文件</el-button>
+        <el-button
+          v-if="authStore.hasPermission('file.upload')"
+          type="primary"
+          :disabled="!kbId"
+          @click="uploadDialogVisible = true"
+        >上传文件</el-button>
       </div>
     </div>
 
@@ -55,7 +60,12 @@
           </el-table-column>
           <el-table-column label="操作" width="200" fixed="right">
             <template #default="{ row }">
-              <el-button text type="primary" @click="openStrategyDialog(row)">重新切分</el-button>
+              <el-button
+                v-if="authStore.hasPermission('file.reprocess')"
+                text
+                type="primary"
+                @click="openStrategyDialog(row)"
+              >重新切分</el-button>
               <el-button
                 v-if="row.status === 2"
                 text
@@ -63,6 +73,7 @@
                 @click="openChunkPreview(row)"
               >分段预览</el-button>
               <el-popconfirm
+                v-if="authStore.hasPermission('file.delete')"
                 title="确认删除该文件？将同时清除其所有向量数据，不可恢复！"
                 confirm-button-text="确认删除"
                 cancel-button-text="取消"
@@ -199,6 +210,7 @@
 <script setup lang="ts">
 import { computed, onUnmounted, reactive, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
+import { useAuthStore } from '../stores/auth'
 import {
   deleteFile,
   getFileChunks,
@@ -209,6 +221,9 @@ import {
   type KnowledgeFile,
   type UploadResult
 } from '../api/file'
+
+const authStore = useAuthStore()
+
 
 const props = defineProps<{
   kbId: number | null

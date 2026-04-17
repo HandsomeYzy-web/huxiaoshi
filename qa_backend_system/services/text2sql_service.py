@@ -21,6 +21,7 @@ from sqlalchemy.engine import Engine
 
 from core.config import settings
 from core.logger import logger
+from core.url_utils import normalize_llm_base_url
 
 # SQL 黑名单关键字（即使 LLM 生成也禁止执行）
 _DANGEROUS_KEYWORDS = re.compile(
@@ -88,9 +89,11 @@ class Text2SQLService:
             cfg = llm_service._resolve_llm_config()
             if not cfg:
                 return None
-            base_url, api_key, model_name = cfg
+            base_url = cfg["base_url"]
+            api_key = cfg["api_key"]
+            model_name = cfg["model_name"]
             self._model = ChatOpenAI(
-                base_url=base_url.rstrip("/"),
+                base_url=normalize_llm_base_url(base_url),
                 api_key=api_key,
                 model=model_name,
                 temperature=0.0,
@@ -242,12 +245,14 @@ class Text2SQLService:
 
         from services.llm_service import llm_service
         cfg = llm_service._resolve_llm_config()
-        base_url, api_key, model_name = cfg
+        base_url = cfg["base_url"]
+        api_key = cfg["api_key"]
+        model_name = cfg["model_name"]
 
         yield "", True, model_name
 
         streaming_model = ChatOpenAI(
-            base_url=base_url.rstrip("/"),
+            base_url=normalize_llm_base_url(base_url),
             api_key=api_key,
             model=model_name,
             temperature=0.1,

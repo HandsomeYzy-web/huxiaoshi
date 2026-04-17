@@ -1,5 +1,3 @@
-"""聊天消息实体：存储每条聊天对话中的用户提问和助手回复记录，包含意图分类、SQL 生成等三链路扩展字段。"""
-
 from datetime import datetime
 from typing import Optional
 
@@ -12,7 +10,7 @@ from .base import Base
 class ChatMessage(Base):
     __tablename__ = "chat_message"
 
-    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    id: Mapped[int] = mapped_column(BigInteger().with_variant(Integer, "sqlite"), primary_key=True, autoincrement=True)
     session_id: Mapped[int] = mapped_column(
         BigInteger,
         ForeignKey("chat_session.id", ondelete="CASCADE"),
@@ -24,15 +22,9 @@ class ChatMessage(Base):
     model_used: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     retrieved_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     citations_json: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-
-    # ── 三链路扩展字段 ────────────────────────────────────────────
-    # intent: casual_chat / data_query / doc_search
     intent: Mapped[Optional[str]] = mapped_column(String(32), nullable=True, comment="意图类型")
-    # 对于 data_query: 存储生成的 SQL
-    generated_sql: Mapped[Optional[str]] = mapped_column(Text, nullable=True, comment="Text2SQL 生成的 SQL")
-    # 对于 data_query: 存储 SQL 执行结果 (JSON)
+    generated_sql: Mapped[Optional[str]] = mapped_column(Text, nullable=True, comment="Text2SQL 生成 SQL")
     sql_result_json: Mapped[Optional[str]] = mapped_column(Text, nullable=True, comment="SQL 查询结果")
-
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime,

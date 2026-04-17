@@ -11,6 +11,7 @@ import httpx
 
 from core.exceptions import ExternalServiceError
 from core.logger import logger
+from core.url_utils import normalize_rerank_base_url
 
 
 class RerankerService:
@@ -66,7 +67,7 @@ class RerankerService:
         model: str,
     ) -> list[tuple[int, float]]:
         """向符合 Jina/Cohere 规范的 /v1/rerank 端点发请求。"""
-        url = base_url.rstrip("/") + "/v1/rerank"
+        url = normalize_rerank_base_url(base_url) + "/v1/rerank"
         headers: dict[str, str] = {"Content-Type": "application/json"}
         if api_key:
             headers["Authorization"] = f"Bearer {api_key}"

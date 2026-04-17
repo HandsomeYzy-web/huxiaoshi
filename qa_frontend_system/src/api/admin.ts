@@ -1,19 +1,39 @@
 import request from '../utils/request'
 
-// ─── Types ────────────────────────────────────────────────────
-
 export interface Permission {
   code: string
   name: string
   description: string
+  parent_code: string | null
   module: string
+  icon?: string | null
+  path?: string | null
+  type: string
+  status: string
+  sort: number
+}
+
+export interface PermissionTreeNode {
+  code: string
+  name: string
+  description: string | null
+  parent_code: string | null
+  module: string
+  icon: string | null
+  path: string | null
+  type: string
+  status: string
+  sort: number
+  children: PermissionTreeNode[]
 }
 
 export interface Role {
   id: number
+  code: string
   name: string
   description: string | null
-  is_system: boolean
+  role_type: string
+  status: string
   created_at: string
   permissions: string[]
 }
@@ -23,7 +43,6 @@ export interface AdminUser {
   username: string
   email: string
   is_active: boolean
-  is_admin: boolean
   created_at: string
   roles: Role[]
 }
@@ -32,52 +51,6 @@ export interface KBAccessInfo {
   kb_id: number
   accessible_role_ids: number[]
 }
-
-// ─── Permission APIs ──────────────────────────────────────────
-
-export const listPermissions = () =>
-  request.get<any, Permission[]>('/admin/permissions')
-
-// ─── Role APIs ────────────────────────────────────────────────
-
-export const listRoles = () =>
-  request.get<any, Role[]>('/admin/roles')
-
-export const createRole = (data: { name: string; description?: string }) =>
-  request.post<any, Role>('/admin/roles', data)
-
-export const updateRole = (roleId: number, data: { name: string; description?: string }) =>
-  request.put<any, Role>(`/admin/roles/${roleId}`, data)
-
-export const deleteRole = (roleId: number) =>
-  request.delete<any, null>(`/admin/roles/${roleId}`)
-
-export const setRolePermissions = (roleId: number, permissionCodes: string[]) =>
-  request.put<any, null>(`/admin/roles/${roleId}/permissions`, { permission_codes: permissionCodes })
-
-// ─── User Management APIs ─────────────────────────────────────
-
-export const listAdminUsers = () =>
-  request.get<any, AdminUser[]>('/admin/users')
-
-export const setUserRoles = (userId: number, roleIds: number[]) =>
-  request.put<any, null>(`/admin/users/${userId}/roles`, { role_ids: roleIds })
-
-export const setUserAdmin = (userId: number, isAdmin: boolean) =>
-  request.put<any, null>(`/admin/users/${userId}/admin?is_admin=${isAdmin}`)
-
-// ─── KB Access Control APIs ───────────────────────────────────
-
-export const getAllKBAccess = () =>
-  request.get<any, KBAccessInfo[]>('/admin/kb/access/all')
-
-export const setKBAccess = (kbId: number, roleIds: number[]) =>
-  request.put<any, null>(`/admin/kb/${kbId}/access`, { role_ids: roleIds })
-
-export const getKBAccess = (kbId: number) =>
-  request.get<any, KBAccessInfo>(`/admin/kb/${kbId}/access`)
-
-// ─── Model Config Types ───────────────────────────────────────
 
 export interface ModelConfig {
   id: number
@@ -125,7 +98,63 @@ export interface ModelActivateResponse {
   needs_rebuild: boolean
 }
 
-// ─── Model Config APIs ────────────────────────────────────────
+// ─── 权限管理 ────────────────────────────────────────────────
+
+export const listPermissions = () =>
+  request.get<any, Permission[]>('/admin/permissions')
+
+export const createPermission = (data: Omit<Permission, 'icon'> & { icon?: string }) =>
+  request.post<any, Permission>('/admin/permissions', data)
+
+export const updatePermission = (code: string, data: Partial<Permission>) =>
+  request.put<any, Permission>(`/admin/permissions/${code}`, data)
+
+export const deletePermission = (code: string) =>
+  request.delete<any, null>(`/admin/permissions/${code}`)
+
+export const getFullPermissionTree = () =>
+  request.get<any, PermissionTreeNode[]>('/admin/permissions/tree/full')
+
+export const getUserPermissionTree = () =>
+  request.get<any, PermissionTreeNode[]>('/admin/permissions/tree/user')
+
+// ─── 角色管理 ────────────────────────────────────────────────
+
+export const listRoles = () =>
+  request.get<any, Role[]>('/admin/roles')
+
+export const createRole = (data: { code: string; name: string; description?: string }) =>
+  request.post<any, Role>('/admin/roles', data)
+
+export const updateRole = (roleId: number, data: { name?: string; description?: string; status?: string }) =>
+  request.put<any, Role>(`/admin/roles/${roleId}`, data)
+
+export const deleteRole = (roleId: number) =>
+  request.delete<any, null>(`/admin/roles/${roleId}`)
+
+export const setRolePermissions = (roleId: number, permissionCodes: string[]) =>
+  request.put<any, null>(`/admin/roles/${roleId}/permissions`, { permission_codes: permissionCodes })
+
+// ─── 用户管理 ────────────────────────────────────────────────
+
+export const listAdminUsers = () =>
+  request.get<any, AdminUser[]>('/admin/users')
+
+export const setUserRoles = (userId: number, roleIds: number[]) =>
+  request.put<any, null>(`/admin/users/${userId}/roles`, { role_ids: roleIds })
+
+// ─── 知识库授权 ──────────────────────────────────────────────
+
+export const getAllKBAccess = () =>
+  request.get<any, KBAccessInfo[]>('/admin/kb/access/all')
+
+export const setKBAccess = (kbId: number, roleIds: number[]) =>
+  request.put<any, null>(`/admin/kb/${kbId}/access`, { role_ids: roleIds })
+
+export const getKBAccess = (kbId: number) =>
+  request.get<any, KBAccessInfo>(`/admin/kb/${kbId}/access`)
+
+// ─── 模型配置 ────────────────────────────────────────────────
 
 export const listModelConfigs = (modelType?: string) =>
   request.get<any, ModelConfig[]>('/admin/models', { params: modelType ? { model_type: modelType } : {} })

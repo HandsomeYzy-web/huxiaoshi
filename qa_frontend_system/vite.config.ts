@@ -7,9 +7,9 @@ export default defineConfig({
   server: {
     proxy: {
       '/api/v1': {
-        target: 'http://127.0.0.1:8000', // ⚠️ 确保 FastAPI 在本地运行在这个端口
-        changeOrigin: true
-      }
-    }
-  }
+        target: 'http://127.0.0.1:8000',
+        changeOrigin: true,
+      },
+    },
+  },
 })

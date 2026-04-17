@@ -1,5 +1,3 @@
-"""文档分段实体：存储知识库文件解析后的文本分段，每条记录对应 Milvus 中的一个向量。"""
-
 from datetime import datetime
 
 from sqlalchemy import BigInteger, DateTime, ForeignKey, Integer, Text, func
@@ -11,7 +9,7 @@ from .base import Base
 class DocumentChunk(Base):
     __tablename__ = "document_chunk"
 
-    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    id: Mapped[int] = mapped_column(BigInteger().with_variant(Integer, "sqlite"), primary_key=True, autoincrement=True)
     kb_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("knowledge_base.id", ondelete="CASCADE"), index=True)
     file_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("knowledge_file.id", ondelete="CASCADE"), index=True)
     chunk_index: Mapped[int] = mapped_column(Integer, nullable=False)

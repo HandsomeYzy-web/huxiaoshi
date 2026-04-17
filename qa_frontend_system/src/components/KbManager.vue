@@ -2,10 +2,12 @@
   <section class="panel-card">
     <div class="panel-header">
       <div>
-        <div class="panel-title">知识库列表</div>
-        <div class="panel-subtitle">创建、查看并选择当前联调目标知识库</div>
+        <div class="panel-title">知识库管理</div>
+        <div class="panel-subtitle">创建、编辑、删除知识库，并切换当前激活的知识库。</div>
       </div>
-      <el-button type="primary" @click="dialogVisible = true">新建知识库</el-button>
+      <el-button v-if="authStore.hasPermission('kb.create')" type="primary" @click="openCreate">
+        新建知识库
+      </el-button>
     </div>
 
     <div class="panel-toolbar">
@@ -15,7 +17,7 @@
 
     <el-scrollbar class="list-scroll">
       <div v-if="knowledgeBases.length === 0" class="empty-block">
-        <el-empty description="还没有知识库，先创建一个用于上传与问答测试" />
+        <el-empty description="当前还没有知识库。" />
       </div>
 
       <div
@@ -29,14 +31,12 @@
           <div class="kb-name">{{ item.name }}</div>
           <div class="kb-actions" @click.stop>
             <el-tag size="small" effect="plain">ID {{ item.id }}</el-tag>
-            <el-button
-              type="primary"
-              size="small"
-              text
-              @click.stop="handleEdit(item)"
-            >编辑</el-button>
+            <el-button v-if="authStore.hasPermission('kb.update')" text type="primary" @click.stop="openEdit(item)">
+              编辑
+            </el-button>
             <el-popconfirm
-              title="确定要删除该知识库吗？此操作将同时删除所有文件和向量数据，不可恢复！"
+              v-if="authStore.hasPermission('kb.delete')"
+              title="确认删除该知识库及其关联数据？"
               confirm-button-text="确认删除"
               cancel-button-text="取消"
               confirm-button-type="danger"
@@ -44,116 +44,50 @@
               @confirm="handleDelete(item.id)"
             >
               <template #reference>
-                <el-button
-                  type="danger"
-                  size="small"
-                  text
-                  :loading="deleting === item.id"
-                  @click.stop
-                >删除</el-button>
+                <el-button text type="danger" :loading="deletingId === item.id" @click.stop>删除</el-button>
               </template>
             </el-popconfirm>
           </div>
         </div>
         <div class="kb-desc">{{ item.description || '暂无描述' }}</div>
         <div class="kb-meta">
-          <span>默认切片 {{ item.default_chunk_size }}</span>
+          <span>分块大小 {{ item.default_chunk_size }}</span>
           <span>重叠 {{ item.default_chunk_overlap }}</span>
           <span>Top-K {{ item.retrieval_top_k }}</span>
           <span>阈值 {{ item.retrieval_score_threshold }}</span>
-          <el-tag v-if="item.enable_rerank" size="small" type="success" effect="plain">Rerank</el-tag>
+          <el-tag v-if="item.enable_rerank" size="small" type="success" effect="plain">启用重排</el-tag>
         </div>
       </div>
     </el-scrollbar>
 
-    <el-dialog v-model="dialogVisible" title="新建知识库" width="480px">
-      <el-form :model="form" label-width="110px">
-        <el-form-item label="名称" required>
-          <el-input v-model="form.name" placeholder="例如：政策文件库" />
-        </el-form-item>
-        <el-form-item label="描述">
-          <el-input
-            v-model="form.description"
-            type="textarea"
-            :rows="3"
-            placeholder="说明这个知识库的用途与收录范围"
-          />
-        </el-form-item>
-        <el-form-item label="默认切片大小">
-          <el-input-number v-model="form.default_chunk_size" :min="100" :max="4000" :step="100" />
-        </el-form-item>
-        <el-form-item label="默认重叠">
-          <el-input-number
-            v-model="form.default_chunk_overlap"
-            :min="0"
-            :max="1000"
-            :step="50"
-          />
-        </el-form-item>
-        <el-form-item label="检索条数 Top-K">
-          <el-input-number v-model="form.retrieval_top_k" :min="1" :max="50" :step="1" />
-        </el-form-item>
-        <el-form-item label="相似度阈值">
-          <el-input-number
-            v-model="form.retrieval_score_threshold"
-            :min="0"
-            :max="1"
-            :step="0.05"
-            :precision="2"
-          />
-        </el-form-item>
-        <el-form-item label="启用 Rerank">
-          <el-switch v-model="form.enable_rerank" />
-          <span style="margin-left:10px;font-size:12px;color:#888">开启后检索结果将经过精排模型重新排序</span>
-        </el-form-item>
+    <el-dialog v-model="createVisible" title="新建知识库" width="500px">
+      <el-form :model="createForm" label-width="130px">
+        <el-form-item label="名称"><el-input v-model="createForm.name" /></el-form-item>
+        <el-form-item label="描述"><el-input v-model="createForm.description" type="textarea" :rows="3" /></el-form-item>
+        <el-form-item label="分块大小"><el-input-number v-model="createForm.default_chunk_size" :min="100" :max="4000" :step="100" /></el-form-item>
+        <el-form-item label="分块重叠"><el-input-number v-model="createForm.default_chunk_overlap" :min="0" :max="1000" :step="50" /></el-form-item>
+        <el-form-item label="Top-K"><el-input-number v-model="createForm.retrieval_top_k" :min="1" :max="50" /></el-form-item>
+        <el-form-item label="得分阈值"><el-input-number v-model="createForm.retrieval_score_threshold" :min="0" :max="1" :step="0.05" :precision="2" /></el-form-item>
+        <el-form-item label="启用重排"><el-switch v-model="createForm.enable_rerank" /></el-form-item>
       </el-form>
       <template #footer>
-        <el-button @click="dialogVisible = false">取消</el-button>
-        <el-button type="primary" :loading="submitting" @click="handleCreate">创建</el-button>
+        <el-button @click="createVisible = false">取消</el-button>
+        <el-button type="primary" :loading="creating" @click="handleCreate">创建</el-button>
       </template>
     </el-dialog>
 
-    <!-- 编辑知识库弹窗 -->
-    <el-dialog v-model="editDialogVisible" title="编辑知识库" width="480px">
-      <el-form :model="editForm" label-width="110px">
-        <el-form-item label="描述">
-          <el-input
-            v-model="editForm.description"
-            type="textarea"
-            :rows="3"
-            placeholder="说明这个知识库的用途与收录范围"
-          />
-        </el-form-item>
-        <el-form-item label="默认切片大小">
-          <el-input-number v-model="editForm.default_chunk_size" :min="100" :max="4000" :step="100" />
-        </el-form-item>
-        <el-form-item label="默认重叠">
-          <el-input-number v-model="editForm.default_chunk_overlap" :min="0" :max="1000" :step="50" />
-        </el-form-item>
-        <el-form-item label="检索条数 Top-K">
-          <el-tooltip content="该知识库单独检索时返回的最多条目数" placement="right">
-            <el-input-number v-model="editForm.retrieval_top_k" :min="1" :max="50" :step="1" />
-          </el-tooltip>
-        </el-form-item>
-        <el-form-item label="相似度阈值">
-          <el-tooltip content="0=不过滤；设置后低于此分的结果将被丢弃" placement="right">
-            <el-input-number
-              v-model="editForm.retrieval_score_threshold"
-              :min="0"
-              :max="1"
-              :step="0.05"
-              :precision="2"
-            />
-          </el-tooltip>
-        </el-form-item>
-        <el-form-item label="启用 Rerank">
-          <el-switch v-model="editForm.enable_rerank" />
-          <span style="margin-left:10px;font-size:12px;color:#888">开启后检索结果将经过精排模型重新排序</span>
-        </el-form-item>
+    <el-dialog v-model="editVisible" title="编辑知识库" width="500px">
+      <el-form :model="editForm" label-width="130px">
+        <el-form-item label="描述"><el-input v-model="editForm.description" type="textarea" :rows="3" /></el-form-item>
+        <el-form-item label="分块大小"><el-input-number v-model="editForm.default_chunk_size" :min="100" :max="4000" :step="100" /></el-form-item>
+        <el-form-item label="分块重叠"><el-input-number v-model="editForm.default_chunk_overlap" :min="0" :max="1000" :step="50" /></el-form-item>
+        <el-form-item label="Top-K"><el-input-number v-model="editForm.retrieval_top_k" :min="1" :max="50" /></el-form-item>
+        <el-form-item label="得分阈值"><el-input-number v-model="editForm.retrieval_score_threshold" :min="0" :max="1" :step="0.05" :precision="2" /></el-form-item>
+        <el-form-item label="启用重排"><el-switch v-model="editForm.enable_rerank" /></el-form-item>
       </el-form>
       <template #footer>
-        <el-button @click="editDialogVisible = false">取消</el-button>
-        <el-button type="primary" :loading="editSubmitting" @click="handleEditSubmit">保存</el-button>
+        <el-button @click="editVisible = false">取消</el-button>
+        <el-button type="primary" :loading="updating" @click="handleEditSubmit">保存</el-button>
       </template>
     </el-dialog>
   </section>
@@ -162,6 +96,8 @@
 <script setup lang="ts">
 import { onMounted, reactive, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
+
+import { useAuthStore } from '../stores/auth'
 import {
   createKnowledgeBase,
   deleteKnowledgeBase,
@@ -169,19 +105,16 @@ import {
   updateKnowledgeBase,
   type CreateKnowledgeBasePayload,
   type KnowledgeBase,
-  type UpdateKnowledgeBasePayload
+  type UpdateKnowledgeBasePayload,
 } from '../api/kb'
 
-const props = withDefaults(
-  defineProps<{
-    modelValue?: number | null
-    autoSelectFirst?: boolean
-  }>(),
-  {
-    modelValue: null,
-    autoSelectFirst: true
-  }
-)
+const authStore = useAuthStore()
+
+
+const props = withDefaults(defineProps<{ modelValue?: number | null; autoSelectFirst?: boolean }>(), {
+  modelValue: null,
+  autoSelectFirst: true,
+})
 
 const emit = defineEmits<{
   (e: 'update:modelValue', id: number | null): void
@@ -191,47 +124,35 @@ const emit = defineEmits<{
 
 const knowledgeBases = ref<KnowledgeBase[]>([])
 const currentKbId = ref<number | null>(props.modelValue)
-const dialogVisible = ref(false)
-const submitting = ref(false)
-const deleting = ref<number | null>(null)
+const createVisible = ref(false)
+const editVisible = ref(false)
+const creating = ref(false)
+const updating = ref(false)
+const deletingId = ref<number | null>(null)
+const editingKbId = ref<number | null>(null)
 
-const form = reactive<CreateKnowledgeBasePayload>({
+const createForm = reactive<CreateKnowledgeBasePayload>({
   name: '',
   description: '',
   default_chunk_size: 1000,
   default_chunk_overlap: 200,
   retrieval_top_k: 5,
-  retrieval_score_threshold: 0.0,
-  enable_rerank: false
+  retrieval_score_threshold: 0,
+  enable_rerank: false,
 })
 
-// 编辑对话框
-const editDialogVisible = ref(false)
-const editingKbId = ref<number | null>(null)
-const editSubmitting = ref(false)
 const editForm = reactive<UpdateKnowledgeBasePayload>({
   description: '',
   default_chunk_size: 1000,
   default_chunk_overlap: 200,
   retrieval_top_k: 5,
-  retrieval_score_threshold: 0.0,
-  enable_rerank: false
+  retrieval_score_threshold: 0,
+  enable_rerank: false,
 })
 
-watch(
-  () => props.modelValue,
-  value => {
-    currentKbId.value = value
-  }
-)
+watch(() => props.modelValue, value => { currentKbId.value = value })
 
-const selectKnowledgeBase = (id: number) => {
-  currentKbId.value = id
-  emit('update:modelValue', id)
-  emit('kb-selected', id)
-}
-
-const fetchKnowledgeBases = async () => {
+async function fetchKnowledgeBases() {
   const data = await getKnowledgeBases()
   knowledgeBases.value = data
   emit('loaded', data)
@@ -241,196 +162,169 @@ const fetchKnowledgeBases = async () => {
     emit('update:modelValue', null)
     return
   }
-
-  const matched = data.find(item => item.id === currentKbId.value)
-  if (matched) return
-
-  if (props.autoSelectFirst) {
-    selectKnowledgeBase(data[0].id)
-  }
+  if (data.some(item => item.id === currentKbId.value)) return
+  if (props.autoSelectFirst) selectKnowledgeBase(data[0].id)
 }
 
-const resetForm = () => {
-  form.name = ''
-  form.description = ''
-  form.default_chunk_size = 1000
-  form.default_chunk_overlap = 200
-  form.retrieval_top_k = 5
-  form.retrieval_score_threshold = 0.0
-  form.enable_rerank = false
+function selectKnowledgeBase(id: number) {
+  currentKbId.value = id
+  emit('update:modelValue', id)
+  emit('kb-selected', id)
 }
 
-const handleCreate = async () => {
-  if (!form.name.trim()) {
-    ElMessage.warning('知识库名称不能为空')
+function resetCreateForm() {
+  createForm.name = ''
+  createForm.description = ''
+  createForm.default_chunk_size = 1000
+  createForm.default_chunk_overlap = 200
+  createForm.retrieval_top_k = 5
+  createForm.retrieval_score_threshold = 0
+  createForm.enable_rerank = false
+}
+
+function openCreate() {
+  resetCreateForm()
+  createVisible.value = true
+}
+
+async function handleCreate() {
+  if (!createForm.name.trim()) {
+    ElMessage.warning('请输入知识库名称')
     return
   }
-
-  submitting.value = true
+  creating.value = true
   try {
-    const created = await createKnowledgeBase({
-      name: form.name.trim(),
-      description: form.description?.trim(),
-      default_chunk_size: form.default_chunk_size,
-      default_chunk_overlap: form.default_chunk_overlap,
-      retrieval_top_k: form.retrieval_top_k,
-      retrieval_score_threshold: form.retrieval_score_threshold,
-      enable_rerank: form.enable_rerank
-    })
-    ElMessage.success('知识库创建成功')
-    dialogVisible.value = false
-    resetForm()
+    const created = await createKnowledgeBase({ ...createForm, name: createForm.name.trim() })
+    createVisible.value = false
+    ElMessage.success('知识库已创建')
     await fetchKnowledgeBases()
     selectKnowledgeBase(created.id)
   } finally {
-    submitting.value = false
+    creating.value = false
   }
 }
 
-const handleDelete = async (id: number) => {
-  deleting.value = id
-  try {
-    await deleteKnowledgeBase(id)
-    ElMessage.success('知识库已删除')
-    if (currentKbId.value === id) {
-      currentKbId.value = null
-      emit('update:modelValue', null)
-    }
-    await fetchKnowledgeBases()
-  } finally {
-    deleting.value = null
-  }
-}
-
-const handleEdit = (item: KnowledgeBase) => {
+function openEdit(item: KnowledgeBase) {
   editingKbId.value = item.id
-  editForm.description = item.description
+  editForm.description = item.description || ''
   editForm.default_chunk_size = item.default_chunk_size
   editForm.default_chunk_overlap = item.default_chunk_overlap
   editForm.retrieval_top_k = item.retrieval_top_k
   editForm.retrieval_score_threshold = item.retrieval_score_threshold
   editForm.enable_rerank = item.enable_rerank
-  editDialogVisible.value = true
+  editVisible.value = true
 }
 
-const handleEditSubmit = async () => {
+async function handleEditSubmit() {
   if (!editingKbId.value) return
-  editSubmitting.value = true
+  updating.value = true
   try {
-    await updateKnowledgeBase(editingKbId.value, editForm)
-    ElMessage.success('知识库配置已更新')
-    editDialogVisible.value = false
+    await updateKnowledgeBase(editingKbId.value, { ...editForm })
+    editVisible.value = false
+    ElMessage.success('知识库已更新')
     await fetchKnowledgeBases()
   } finally {
-    editSubmitting.value = false
+    updating.value = false
   }
 }
 
-defineExpose({
-  refresh: fetchKnowledgeBases
-})
+async function handleDelete(id: number) {
+  deletingId.value = id
+  try {
+    await deleteKnowledgeBase(id)
+    ElMessage.success('知识库已删除')
+    await fetchKnowledgeBases()
+  } finally {
+    deletingId.value = null
+  }
+}
 
-onMounted(fetchKnowledgeBases)
+onMounted(async () => {
+  await fetchKnowledgeBases()
+})
 </script>
 
 <style scoped>
 .panel-card {
   height: 100%;
+  min-height: 500px;
   display: flex;
   flex-direction: column;
   padding: 24px;
-  border-radius: 24px;
-  background: rgba(255, 255, 255, 0.92);
-  box-shadow: 0 18px 40px rgba(32, 50, 45, 0.08);
+  border-radius: 20px;
+  background: #fff;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.05);
+  box-sizing: border-box;
+}
+
+.panel-header,
+.panel-toolbar,
+.kb-headline,
+.kb-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
 }
 
 .panel-header {
-  display: flex;
-  justify-content: space-between;
-  gap: 16px;
-  align-items: center;
-}
-
-.panel-title {
-  font-size: 22px;
-  font-weight: 800;
-  color: #18312a;
-}
-
-.panel-subtitle {
-  margin-top: 6px;
-  font-size: 13px;
-  color: #6b7c76;
+  margin-bottom: 16px;
 }
 
 .panel-toolbar {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin: 18px 0 12px;
+  margin-bottom: 12px;
+}
+
+.panel-title {
+  font-size: 20px;
+  font-weight: 700;
+  color: #1d2129;
+}
+
+.panel-subtitle {
+  margin-top: 4px;
+  font-size: 13px;
+  color: #86909c;
 }
 
 .list-scroll {
   flex: 1;
-  min-height: 260px;
 }
 
 .empty-block {
-  padding: 30px 0;
+  display: grid;
+  place-items: center;
+  min-height: 260px;
 }
 
 .kb-item {
-  padding: 16px 18px;
-  margin-bottom: 12px;
-  border-radius: 18px;
+  margin-bottom: 14px;
+  padding: 16px;
+  border: 1px solid #ebeef5;
+  border-radius: 14px;
   cursor: pointer;
-  border: 1px solid #e5ece6;
-  background: #f8faf7;
-  transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
-}
-
-.kb-item:hover {
-  transform: translateY(-1px);
-  border-color: #b6c8bc;
-  box-shadow: 0 10px 24px rgba(28, 53, 45, 0.08);
+  transition: 0.2s ease;
 }
 
 .kb-item.active {
-  border-color: #2b6150;
-  background: linear-gradient(135deg, #eef4dd 0%, #f5ecd2 100%);
-}
-
-.kb-headline {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 12px;
-}
-
-.kb-actions {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  flex-shrink: 0;
+  border-color: #409eff;
+  box-shadow: 0 0 0 1px rgba(64, 158, 255, 0.15);
 }
 
 .kb-name {
   font-size: 16px;
   font-weight: 700;
-  color: #18312a;
+}
+
+.kb-actions,
+.kb-meta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
 }
 
 .kb-desc {
-  margin-top: 10px;
-  color: #5e706a;
-  line-height: 1.6;
-}
-
-.kb-meta {
-  display: flex;
-  gap: 14px;
-  margin-top: 12px;
-  font-size: 12px;
-  color: #768883;
+  margin: 10px 0;
+  color: #606266;
 }
 </style>

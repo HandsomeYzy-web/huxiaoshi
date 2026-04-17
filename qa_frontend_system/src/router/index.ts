@@ -1,125 +1,112 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import type { RouteRecordRaw } from 'vue-router'
 
+import { canAccessRoute } from '../access/control'
+import { ACCESS_CODES, APP_TITLES, ROUTE_PATHS } from '../constants/access'
+
 declare module 'vue-router' {
   interface RouteMeta {
     title?: string
     public?: boolean
     permission?: string
-    requireAdmin?: boolean
     section?: string
   }
 }
 
 const routes: RouteRecordRaw[] = [
   {
-    path: '/login',
+    path: ROUTE_PATHS.login,
     name: 'Login',
     component: () => import('../views/auth/login.vue'),
-    meta: { title: '登录', public: true }
+    meta: { title: '登录', public: true },
   },
   {
-    path: '/register',
+    path: ROUTE_PATHS.register,
     name: 'Register',
     component: () => import('../views/auth/register.vue'),
-    meta: { title: '注册', public: true }
+    meta: { title: '注册', public: true },
   },
   {
-    path: '/chat',
+    path: ROUTE_PATHS.chat,
     name: 'Chat',
     component: () => import('../views/chat/index.vue'),
-    meta: { title: '跨库聊天', permission: 'chat.use' }
+    meta: { title: '智能问答', permission: ACCESS_CODES.chatUse },
   },
   {
-    path: '/',
+    path: ROUTE_PATHS.home,
     component: () => import('../views/layout/index.vue'),
-    redirect: '/workspace/overview',
+    redirect: ROUTE_PATHS.overview,
     children: [
       {
         path: 'workspace/overview',
         name: 'WorkspaceOverview',
         component: () => import('../views/workspace/overview.vue'),
-        meta: { title: '工作台总览', section: 'overview' }
+        meta: { title: '工作台概览', section: 'overview' },
       },
       {
         path: 'workspace/knowledge-bases',
         name: 'WorkspaceKnowledgeBases',
         component: () => import('../views/workspace/knowledge-bases.vue'),
-        meta: { title: '知识库管理', section: 'knowledge-bases', permission: 'kb.manage' }
+        meta: { title: '知识库管理', section: 'knowledge-bases', permission: ACCESS_CODES.workspaceKb },
       },
       {
         path: 'workspace/files',
         name: 'WorkspaceFiles',
         component: () => import('../views/workspace/files.vue'),
-        meta: { title: '文件处理', section: 'files', permission: 'file.manage' }
+        meta: { title: '文件处理', section: 'files', permission: ACCESS_CODES.workspaceFile },
       },
       {
         path: 'workspace/qa-test',
         name: 'WorkspaceQaTest',
         component: () => import('../views/workspace/qa-test.vue'),
-        meta: { title: '召回测试', section: 'qa-test', permission: 'qa.test' }
+        meta: { title: '召回测试', section: 'qa-test', permission: ACCESS_CODES.workspaceQa },
       },
       {
         path: 'admin',
         name: 'Admin',
         component: () => import('../views/admin/index.vue'),
-        meta: { title: '系统管理', section: 'admin', requireAdmin: true }
-      }
-    ]
+        meta: { title: '系统管理', section: 'admin', permission: ACCESS_CODES.admin },
+      },
+    ],
   },
   {
-    path: '/403',
+    path: ROUTE_PATHS.forbidden,
     name: 'Forbidden',
     component: () => import('../views/auth/login.vue'),
-    meta: { title: '无权限', public: true }
-  }
+    meta: { title: '无权访问', public: true },
+  },
 ]
 
 const router = createRouter({
   history: createWebHistory(),
-  routes
+  routes,
 })
 
-router.beforeEach(async (to) => {
-  const token = localStorage.getItem('qa_access_token')
+router.beforeEach(async to => {
+  document.title = `${String(to.meta.title || APP_TITLES.workspace)} - ${APP_TITLES.appName}`
 
-  // 1. 公开页面无需认证
+  const token = localStorage.getItem('qa_access_token')
   if (to.meta.public) {
-    if (token && (to.path === '/login' || to.path === '/register')) {
-      return '/'
-    }
+    if (token && (to.path === ROUTE_PATHS.login || to.path === ROUTE_PATHS.register)) return ROUTE_PATHS.home
     return
   }
+  if (!token) return ROUTE_PATHS.login
 
-  // 2. 未登录跳转登录页
-  if (!token) {
-    return '/login'
-  }
-
-  // 3. 权限校验：懒加载 auth store，确保用户信息已获取
   const { useAuthStore } = await import('../stores/auth')
   const authStore = useAuthStore()
+  await authStore.init()
 
-  // 确保用户信息已加载
-  if (!authStore.user) {
-    await authStore.init()
-  }
-
-  // 用户信息加载失败（token 失效等）
-  if (!authStore.user) {
-    return '/login'
-  }
-
-  // 4. 管理员页面校验
-  if (to.meta.requireAdmin && !authStore.isAdmin) {
-    return '/workspace/overview'
-  }
-
-  // 5. 权限码校验
-  if (to.meta.permission && !authStore.hasPermission(to.meta.permission)) {
-    return '/workspace/overview'
+  if (!authStore.user) return ROUTE_PATHS.login
+  if (
+    !canAccessRoute(
+      {
+        permissions: authStore.permissions,
+      },
+      to.meta,
+    )
+  ) {
+    return ROUTE_PATHS.overview
   }
 })
 
 export default router
-

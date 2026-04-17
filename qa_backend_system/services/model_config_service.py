@@ -98,6 +98,11 @@ class ModelConfigService:
                 db.flush()
 
         updated = repo.update(config_id, update_data)
+
+        # 任何字段变更都应清缓存，否则运行中的服务继续使用旧配置
+        if config.is_active:
+            self._invalidate_service_cache(config.model_type)
+
         return _to_response(updated)
 
     def activate_config(self, db: Session, config_id: int) -> dict:
@@ -184,9 +189,6 @@ class ModelConfigService:
                 llm_service._model = None
                 llm_service._streaming_model = None
                 llm_service._resolved_model_name = None
-            # intent_service 和 text2sql_service 也缓存了 ChatOpenAI 实例
-            from services.intent_service import intent_service
-            intent_service._model = None
             from services.text2sql_service import text2sql_service
             text2sql_service._model = None
         elif model_type == "embedding":

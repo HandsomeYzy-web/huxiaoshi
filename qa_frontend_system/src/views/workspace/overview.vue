@@ -3,14 +3,14 @@
     <section class="hero-card">
       <div class="hero-copy">
         <div class="eyebrow">Workspace</div>
-        <h2>一个可继续扩展的管理端工作台</h2>
+        <h2>面向知识库问答的一体化工作台</h2>
         <p>
-          左侧导航已经抽成固定工作区结构，后续你增加功能时，只需要新增页面组件和菜单路由，
-          不需要再改整体布局。
+          当前前端已经按“菜单、路由、按钮权限”三层模型组织。后续扩展功能时，只需要补充业务页面与权限元数据，
+          不需要再改整套导航和鉴权骨架。
         </p>
         <div class="hero-actions">
           <router-link class="hero-link" to="/workspace/knowledge-bases">进入知识库管理</router-link>
-          <router-link class="hero-link muted" to="/workspace/qa-test">进入问答测试</router-link>
+          <router-link class="hero-link muted" to="/workspace/qa-test">进入召回测试</router-link>
         </div>
       </div>
     </section>
@@ -20,15 +20,15 @@
       <div class="summary-list">
         <div class="summary-item">
           <strong>知识库管理</strong>
-          <span>创建知识库并维护默认切分参数</span>
+          <span>创建知识库，维护默认切分参数、检索阈值与重排配置。</span>
         </div>
         <div class="summary-item">
           <strong>文件处理</strong>
-          <span>上传文件、轮询状态、单文件重算</span>
+          <span>上传文件、轮询解析状态，并按单文件重设切分策略。</span>
         </div>
         <div class="summary-item">
-          <strong>问答测试</strong>
-          <span>直接联调 `/qa/ask` 接口并查看 citations</span>
+          <strong>召回测试</strong>
+          <span>直接联调检索接口，检查命中片段、相关分数与引用来源。</span>
         </div>
       </div>
     </section>

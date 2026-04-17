@@ -79,6 +79,9 @@ class Settings(BaseSettings):
     # ── General ───────────────────────────────────────────────────
     DEFAULT_RETRIEVAL_TOP_K: int = 5
     LLM_TIMEOUT: int = 120
+    INTENT_ENHANCED_ROUTING_ENABLED: bool = True
+    INTENT_CONFIDENCE_THRESHOLD: float = 0.85
+    INTENT_MAX_HISTORY_MESSAGES: int = 6
 
     @computed_field
     @property

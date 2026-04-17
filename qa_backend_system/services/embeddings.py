@@ -12,6 +12,7 @@ import threading
 from langchain_openai import OpenAIEmbeddings
 
 from core.logger import logger
+from core.url_utils import normalize_embedding_base_url
 
 _instance: OpenAIEmbeddings | None = None
 _lock = threading.Lock()
@@ -21,14 +22,9 @@ _vector_dim: int | None = None
 def _normalize_api_base(url: str) -> str:
     """Normalize API base URL for OpenAI-compatible endpoints.
 
-    - Strip trailing slashes
-    - Remove trailing '/embeddings' if present (langchain appends it automatically)
+    Delegates to the shared normalize_embedding_base_url utility.
     """
-    url = url.rstrip("/")
-    # langchain_openai will append /embeddings, so strip it to avoid duplication
-    if url.endswith("/embeddings"):
-        url = url[: -len("/embeddings")]
-    return url
+    return normalize_embedding_base_url(url)
 
 
 def _resolve_embedding_config() -> tuple[str, str, str] | None:

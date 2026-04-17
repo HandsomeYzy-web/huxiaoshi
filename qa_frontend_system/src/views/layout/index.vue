@@ -1,36 +1,14 @@
 <template>
   <el-container class="workspace-shell">
-    <el-aside class="workspace-aside" width="260px">
+    <el-aside class="workspace-aside" width="280px">
       <div class="brand-block">
         <div class="brand-mark">QA</div>
         <div>
-          <div class="brand-title">管理工作台</div>
-          <div class="brand-subtitle">知识库、文件与召回验证</div>
+          <div class="brand-title">{{ APP_TITLES.workspace }}</div>
         </div>
       </div>
 
-      <el-menu
-        class="workspace-menu"
-        :default-active="activePath"
-        router
-        background-color="transparent"
-        text-color="#adc2bd"
-        active-text-color="#102a24"
-      >
-        <el-menu-item
-          v-for="item in visibleNavItems"
-          :key="item.path"
-          :index="item.path"
-          class="workspace-menu-item"
-        >
-          <el-icon><component :is="item.icon" /></el-icon>
-          <span>{{ item.label }}</span>
-        </el-menu-item>
-      </el-menu>
-
-      <!-- 管理员专属入口 -->
-      <div v-if="authStore.isAdmin" class="admin-section">
-        <div class="section-divider">管理员</div>
+      <el-scrollbar class="menu-scroll">
         <el-menu
           class="workspace-menu"
           :default-active="activePath"
@@ -39,25 +17,50 @@
           text-color="#adc2bd"
           active-text-color="#102a24"
         >
-          <el-menu-item index="/admin" class="workspace-menu-item">
-            <el-icon><Setting /></el-icon>
-            <span>系统管理</span>
-          </el-menu-item>
+          <template v-for="node in menuTree" :key="node.code">
+            <!-- Level 1 with children → sub-menu -->
+            <el-sub-menu v-if="node.children.length > 0" :index="node.path || node.code">
+              <template #title>
+                <el-icon><component :is="resolveIcon(node.icon)" /></el-icon>
+                <span>{{ node.name }}</span>
+              </template>
+              <el-menu-item
+                v-for="child in node.children"
+                :key="child.code"
+                :index="child.path!"
+                class="workspace-menu-item"
+              >
+                <el-icon><component :is="resolveIcon(child.icon)" /></el-icon>
+                <span>{{ child.name }}</span>
+              </el-menu-item>
+            </el-sub-menu>
+
+            <!-- Level 1 without visible children → single item -->
+            <el-menu-item
+              v-else
+              :index="node.path || '/'"
+              class="workspace-menu-item"
+            >
+              <el-icon><component :is="resolveIcon(node.icon)" /></el-icon>
+              <span>{{ node.name }}</span>
+            </el-menu-item>
+          </template>
         </el-menu>
-      </div>
+      </el-scrollbar>
     </el-aside>
 
     <el-container class="workspace-main">
       <el-header class="workspace-header">
         <div>
+          <div class="header-eyebrow">{{ currentSection }}</div>
           <div class="header-title">{{ currentTitle }}</div>
         </div>
-        <div class="header-user" v-if="authStore.user">
-          <el-tag v-if="authStore.isAdmin" type="danger" size="small" style="margin-right:8px">管理员</el-tag>
+        <div v-if="authStore.user" class="header-user">
           <span class="user-name">{{ authStore.user.username }}</span>
-          <el-button link size="small" @click="handleLogout" class="logout-btn">退出登录</el-button>
+          <el-button link size="small" class="logout-btn" @click="handleLogout">退出登录</el-button>
         </div>
       </el-header>
+
       <el-main class="workspace-content">
         <router-view />
       </el-main>
@@ -68,31 +71,65 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { DataAnalysis, FolderOpened, Files, ChatLineRound, Setting } from '@element-plus/icons-vue'
+import {
+  ChatDotRound,
+  ChatLineRound,
+  DataAnalysis,
+  Files,
+  FolderOpened,
+  Setting,
+  User,
+  UserFilled,
+} from '@element-plus/icons-vue'
+
+import { getSectionLabel } from '../../access/control'
+import type { PermissionTreeNode } from '../../api/admin'
+import { APP_TITLES, ROUTE_PATHS } from '../../constants/access'
 import { useAuthStore } from '../../stores/auth'
 
 const route = useRoute()
 const router = useRouter()
 const authStore = useAuthStore()
 
-const allNavItems = [
-  { path: '/workspace/overview', label: '工作台总览', icon: DataAnalysis, permission: null },
-  { path: '/workspace/knowledge-bases', label: '知识库管理', icon: FolderOpened, permission: 'kb.manage' },
-  { path: '/workspace/files', label: '文件处理', icon: Files, permission: 'file.manage' },
-  { path: '/workspace/qa-test', label: '召回测试', icon: ChatLineRound, permission: 'qa.test' },
-]
+const iconMap: Record<string, unknown> = {
+  ChatDotRound,
+  ChatLineRound,
+  DataAnalysis,
+  Files,
+  FolderOpened,
+  Setting,
+  UserFilled,
+  User,
+}
 
-const visibleNavItems = computed(() =>
-  allNavItems.filter(item => !item.permission || authStore.hasPermission(item.permission))
-)
+/**
+ * 从权限树构建菜单：
+ * - Level 1 带 path 的节点作为菜单分组
+ * - Level 2 带 path 的子节点作为菜单项
+ * - 过滤掉 chat 分组（chat 有独立页面不在 layout 内）
+ */
+const menuTree = computed<PermissionTreeNode[]>(() => {
+  return authStore.permissionTree
+    .filter(node => node.code !== 'chat' && node.path)
+    .map(node => ({
+      ...node,
+      children: (node.children || []).filter(child => child.path),
+    }))
+})
 
+const currentTitle = computed(() => String(route.meta.title || APP_TITLES.workspace))
+const currentSection = computed(() => getSectionLabel(route.path))
 const activePath = computed(() => route.path)
-const currentTitle = computed(() => String(route.meta.title || '管理工作台'))
+
+function resolveIcon(icon: string | null) {
+  return (icon && iconMap[icon]) || Setting
+}
 
 function handleLogout() {
   authStore.logout()
-  router.push('/login')
-}</script>
+  router.push(ROUTE_PATHS.login)
+}
+</script>
 
 <style scoped>
 .workspace-shell {
@@ -107,8 +144,7 @@ function handleLogout() {
   flex-direction: column;
   padding: 22px 18px 18px;
   color: #f6f6ee;
-  background:
-    linear-gradient(180deg, #14231f 0%, #1a322d 52%, #1d4540 100%);
+  background: linear-gradient(180deg, #14231f 0%, #1a322d 52%, #1d4540 100%);
   border-right: 1px solid rgba(255, 255, 255, 0.08);
 }
 
@@ -134,20 +170,19 @@ function handleLogout() {
 .brand-title {
   font-size: 18px;
   font-weight: 700;
-  letter-spacing: 0.04em;
 }
 
-.brand-subtitle {
-  margin-top: 4px;
-  font-size: 12px;
-  color: rgba(246, 246, 238, 0.7);
+.menu-scroll {
+  flex: 1;
+  min-height: 0;
 }
 
 .workspace-menu {
   border-right: none;
 }
 
-:deep(.workspace-menu-item) {
+:deep(.workspace-menu-item),
+:deep(.el-sub-menu__title) {
   height: 46px;
   margin-bottom: 8px;
   border-radius: 14px;
@@ -158,19 +193,8 @@ function handleLogout() {
   background: linear-gradient(135deg, #f2d98d 0%, #e8f0cf 100%);
 }
 
-.footer-label {
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: #f2d98d;
-}
-
-.footer-note {
-  margin-top: 10px;
-  line-height: 1.6;
-  font-size: 13px;
-  color: rgba(246, 246, 238, 0.75);
+:deep(.el-sub-menu .el-menu-item) {
+  margin: 4px 0 4px 12px;
 }
 
 .workspace-main {
@@ -182,7 +206,19 @@ function handleLogout() {
   align-items: center;
   justify-content: space-between;
   padding: 28px 32px 10px;
-  background: transparent;
+}
+
+.header-eyebrow {
+  font-size: 12px;
+  letter-spacing: 0.12em;
+  color: #7b8d86;
+}
+
+.header-title {
+  font-size: 28px;
+  line-height: 1.15;
+  font-weight: 800;
+  color: #16312a;
 }
 
 .header-user {
@@ -194,7 +230,6 @@ function handleLogout() {
 .user-name {
   font-size: 14px;
   color: #5d6f69;
-  font-weight: 500;
 }
 
 .logout-btn {
@@ -202,34 +237,8 @@ function handleLogout() {
   color: #888;
 }
 
-.header-title {
-  font-size: 28px;
-  line-height: 1.15;
-  font-weight: 800;
-  color: #16312a;
-}
-
-.header-subtitle {
-  margin-top: 8px;
-  font-size: 14px;
-  color: #5d6f69;
-}
-
 .workspace-content {
   padding: 0 24px 24px;
-}
-
-.admin-section {
-  margin-top: 16px;
-}
-
-.section-divider {
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  color: rgba(242, 217, 141, 0.6);
-  padding: 8px 16px 4px;
 }
 
 @media (max-width: 900px) {

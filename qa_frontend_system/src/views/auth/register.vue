@@ -4,7 +4,7 @@
       <div class="auth-header">
         <div class="brand-mark">QA</div>
         <h2>注册账号</h2>
-        <p>创建你的知识库问答账号</p>
+        <p>创建一个新的知识库问答系统账号</p>
       </div>
 
       <el-form
@@ -15,7 +15,7 @@
         @submit.prevent="handleRegister"
       >
         <el-form-item label="用户名" prop="username">
-          <el-input v-model="form.username" placeholder="3-64位，字母/数字/下划线" size="large" />
+          <el-input v-model="form.username" placeholder="3-64 位，只允许字母、数字和下划线" size="large" />
         </el-form-item>
         <el-form-item label="邮箱" prop="email">
           <el-input v-model="form.email" placeholder="请输入邮箱地址" size="large" />
@@ -24,7 +24,7 @@
           <el-input
             v-model="form.password"
             type="password"
-            placeholder="至少6位"
+            placeholder="至少 6 位"
             size="large"
             show-password
           />
@@ -33,7 +33,7 @@
           <el-input
             v-model="form.confirmPassword"
             type="password"
-            placeholder="再次输入密码"
+            placeholder="请再次输入密码"
             size="large"
             show-password
             @keyup.enter="handleRegister"
@@ -63,6 +63,7 @@ import { reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import type { FormInstance, FormRules } from 'element-plus'
 import { ElMessage } from 'element-plus'
+
 import { useAuthStore } from '../../stores/auth'
 
 const router = useRouter()
@@ -89,11 +90,11 @@ const validateConfirmPwd = (_: unknown, value: string, callback: (e?: Error) => 
 const rules: FormRules = {
   username: [
     { required: true, message: '请输入用户名', trigger: 'blur' },
-    { min: 3, max: 64, message: '用户名长度为 3-64 位', trigger: 'blur' },
+    { min: 3, max: 64, message: '用户名长度必须在 3 到 64 位之间', trigger: 'blur' },
     { pattern: /^[a-zA-Z0-9_]+$/, message: '用户名只允许字母、数字和下划线', trigger: 'blur' },
   ],
   email: [
-    { required: true, message: '请输入邮箱', trigger: 'blur' },
+    { required: true, message: '请输入邮箱地址', trigger: 'blur' },
     { type: 'email', message: '请输入有效的邮箱地址', trigger: 'blur' },
   ],
   password: [
@@ -107,7 +108,7 @@ const rules: FormRules = {
 }
 
 async function handleRegister() {
-  await formRef.value?.validate(async (valid) => {
+  await formRef.value?.validate(async valid => {
     if (!valid) return
     loading.value = true
     try {
@@ -118,8 +119,6 @@ async function handleRegister() {
       })
       ElMessage.success('注册成功，请登录')
       router.push('/login')
-    } catch {
-      // error handled by request interceptor
     } finally {
       loading.value = false
     }

@@ -10,8 +10,10 @@ export interface UserInfo {
   username: string
   email: string
   is_active: boolean
-  is_admin: boolean
   permissions: string[]
+  roles: string[]
+  permission_tree: import('./admin').PermissionTreeNode[]
+  created_at?: string
 }
 
 export interface RegisterRequest {
@@ -36,4 +38,3 @@ export function login(data: LoginRequest): Promise<TokenResponse> {
 export function getMe(): Promise<UserInfo> {
   return request.get('/auth/me')
 }
-

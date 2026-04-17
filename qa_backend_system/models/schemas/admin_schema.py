@@ -1,58 +1,100 @@
-"""管理员模块数据模型：包含角色 CRUD、权限分配、用户管理、知识库访问控制等接口的请求/响应模型。"""
-
 from datetime import datetime
-from typing import Optional
-from pydantic import BaseModel, Field, ConfigDict
+from typing import Any, Optional
 
+from pydantic import BaseModel, ConfigDict, Field
 
-# ─── 角色 ─────────────────────────────────────────────────────
 
 class RoleCreate(BaseModel):
-    name: str = Field(..., max_length=64, description="角色名称")
-    description: Optional[str] = Field(None, max_length=256, description="角色描述")
-
-
-class RoleUpdate(BaseModel):
+    code: str = Field(..., max_length=64)
     name: str = Field(..., max_length=64)
     description: Optional[str] = Field(None, max_length=256)
 
 
+class RoleUpdate(BaseModel):
+    name: Optional[str] = Field(None, max_length=64)
+    description: Optional[str] = Field(None, max_length=256)
+    status: Optional[str] = Field(None, max_length=16)
+
+
 class RoleResponse(BaseModel):
     id: int
+    code: str
     name: str
     description: Optional[str] = None
-    is_system: bool
+    role_type: str
+    status: str
     created_at: datetime
-    permissions: list[str] = Field(default_factory=list, description="权限code列表")
+    permissions: list[str] = Field(default_factory=list)
 
     model_config = ConfigDict(from_attributes=True)
 
 
-# ─── 权限 ─────────────────────────────────────────────────────
+class PermissionCreate(BaseModel):
+    code: str = Field(..., min_length=2, max_length=64)
+    name: str = Field(..., min_length=1, max_length=64)
+    description: Optional[str] = Field(None, max_length=256)
+    parent_code: Optional[str] = Field(None, max_length=64)
+    module: str = Field(..., min_length=1, max_length=32)
+    icon: Optional[str] = Field(None, max_length=64)
+    path: Optional[str] = Field(None, max_length=255)
+    type: str = Field(default="feature", max_length=16)
+    status: str = Field(default="active", max_length=16)
+    sort: int = Field(default=0, ge=0)
+
+
+class PermissionUpdate(BaseModel):
+    name: Optional[str] = Field(None, min_length=1, max_length=64)
+    description: Optional[str] = Field(None, max_length=256)
+    parent_code: Optional[str] = Field(None, max_length=64)
+    module: Optional[str] = Field(None, min_length=1, max_length=32)
+    icon: Optional[str] = Field(None, max_length=64)
+    path: Optional[str] = Field(None, max_length=255)
+    type: Optional[str] = Field(None, max_length=16)
+    status: Optional[str] = Field(None, max_length=16)
+    sort: Optional[int] = Field(None, ge=0)
+
 
 class PermissionResponse(BaseModel):
     code: str
     name: str
     description: Optional[str] = None
+    parent_code: Optional[str] = None
     module: str
+    icon: Optional[str] = None
+    path: Optional[str] = None
+    type: str
+    status: str
+    sort: int
 
     model_config = ConfigDict(from_attributes=True)
 
 
-# ─── 用户-角色 ────────────────────────────────────────────────
+class PermissionTreeNode(BaseModel):
+    code: str
+    name: str
+    description: Optional[str] = None
+    parent_code: Optional[str] = None
+    module: str
+    icon: Optional[str] = None
+    path: Optional[str] = None
+    type: str = "feature"
+    status: str = "active"
+    sort: int = 0
+    children: list["PermissionTreeNode"] = Field(default_factory=list)
+
+    model_config = ConfigDict(from_attributes=True)
+
 
 class UserRoleAssign(BaseModel):
-    role_ids: list[int] = Field(..., description="要分配给用户的角色ID列表（覆盖更新）")
+    role_ids: list[int] = Field(default_factory=list)
 
 
 class RolePermissionSet(BaseModel):
-    permission_codes: list[str] = Field(..., description="要分配给角色的权限code列表（覆盖更新）")
+    permission_codes: list[str] = Field(default_factory=list)
 
-
-# ─── 知识库访问控制 ─────────────────────────────────────────────
 
 class KBAccessSet(BaseModel):
-    role_ids: list[int] = Field(..., description="可访问该知识库的角色ID列表（覆盖更新）")
+    role_ids: list[int] = Field(default_factory=list)
 
 
 class KBAccessResponse(BaseModel):
@@ -60,15 +102,15 @@ class KBAccessResponse(BaseModel):
     accessible_role_ids: list[int]
 
 
-# ─── 管理员用户列表 ────────────────────────────────────────────
-
 class UserAdminResponse(BaseModel):
     id: int
     username: str
     email: str
     is_active: bool
-    is_admin: bool
     created_at: datetime
     roles: list[RoleResponse] = Field(default_factory=list)
 
     model_config = ConfigDict(from_attributes=True)
+
+
+PermissionTreeNode.model_rebuild()

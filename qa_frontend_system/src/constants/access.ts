@@ -1,0 +1,66 @@
+export const ACCESS_CODES = {
+  // Level 1 菜单分组
+  chat: 'chat',
+  workspace: 'workspace',
+  admin: 'admin',
+
+  // Level 2 子页面
+  chatUse: 'chat.use',
+  workspaceOverview: 'workspace.overview',
+  workspaceKb: 'workspace.kb',
+  workspaceFile: 'workspace.file',
+  workspaceQa: 'workspace.qa',
+  adminRole: 'admin.role',
+  adminUser: 'admin.user',
+  adminPermission: 'admin.permission',
+  adminKbAccess: 'admin.kb_access',
+  adminModel: 'admin.model',
+
+  // Level 3 业务操作
+  kbView: 'kb.view',
+  kbCreate: 'kb.create',
+  kbUpdate: 'kb.update',
+  kbDelete: 'kb.delete',
+  kbGrant: 'kb.grant',
+  fileUpload: 'file.upload',
+  fileDelete: 'file.delete',
+  fileReprocess: 'file.reprocess',
+  qaRun: 'qa.run',
+  roleView: 'role.view',
+  roleCreate: 'role.create',
+  roleUpdate: 'role.update',
+  roleDelete: 'role.delete',
+  roleAssign: 'role.assign',
+  userView: 'user.view',
+  userAssign: 'user.assign',
+  permissionView: 'permission.view',
+  permissionCreate: 'permission.create',
+  permissionUpdate: 'permission.update',
+  permissionDelete: 'permission.delete',
+  kbAccessView: 'kb_access.view',
+  kbAccessAssign: 'kb_access.assign',
+  modelView: 'model.view',
+  modelCreate: 'model.create',
+  modelUpdate: 'model.update',
+  modelDelete: 'model.delete',
+  modelActivate: 'model.activate',
+} as const
+
+export const ROUTE_PATHS = {
+  login: '/login',
+  register: '/register',
+  home: '/',
+  overview: '/workspace/overview',
+  knowledgeBases: '/workspace/knowledge-bases',
+  files: '/workspace/files',
+  qaTest: '/workspace/qa-test',
+  chat: '/chat',
+  admin: '/admin',
+  forbidden: '/403',
+} as const
+
+export const APP_TITLES = {
+  appName: 'QA 知识库问答系统',
+  workspace: '智能问答工作台',
+  admin: '系统管理中心',
+} as const

@@ -11,7 +11,6 @@ from __future__ import annotations
 
 import re
 from collections import defaultdict
-from collections.abc import Generator
 
 from langchain_core.documents import Document
 from langchain_core.runnables import RunnableLambda
@@ -28,15 +27,15 @@ from models.schemas.qa_schema import (
 from repositories.kb_repo import KBRepo
 from repositories.file_repo import FileRepo
 from repositories.milvus_repo import milvus_repo
-from services.embeddings import get_embeddings
+from services import embeddings
 from services.llm_service import llm_service
 from services.reranker_service import reranker_service
 
 
 class QAService:
-    def ask(self, db: Session, request: QAAskRequest) -> QAAskResponse:
+    def ask(self, db: Session, request: QAAskRequest, user_id: int) -> QAAskResponse:
         repo = KBRepo(db)
-        target_kb_ids = self._resolve_target_kb_ids(repo, request.kb_id, request.kb_ids)
+        target_kb_ids = self._resolve_target_kb_ids(db, repo, request.kb_id, request.kb_ids, user_id)
         top_k = request.top_k or settings.DEFAULT_RETRIEVAL_TOP_K
 
         docs = self._make_retriever(db, target_kb_ids, top_k).invoke(request.question)
@@ -51,9 +50,9 @@ class QAService:
             model_used=model_used,
         )
 
-    def retrieve(self, db: Session, request: QAAskRequest) -> QAAskResponse:
+    def retrieve(self, db: Session, request: QAAskRequest, user_id: int) -> QAAskResponse:
         repo = KBRepo(db)
-        target_kb_ids = self._resolve_target_kb_ids(repo, request.kb_id, request.kb_ids)
+        target_kb_ids = self._resolve_target_kb_ids(db, repo, request.kb_id, request.kb_ids, user_id)
         top_k = request.top_k or settings.DEFAULT_RETRIEVAL_TOP_K
 
         docs = self._make_retriever(db, target_kb_ids, top_k).invoke(request.question)
@@ -65,9 +64,8 @@ class QAService:
             model_used=None,
         )
 
-    def chat(self, db: Session, request: ChatAskRequest) -> ChatAskResponse:
-        repo = KBRepo(db)
-        knowledge_bases = repo.get_all_kbs()
+    def chat(self, db: Session, request: ChatAskRequest, user_id: int) -> ChatAskResponse:
+        knowledge_bases = self._get_accessible_kbs(db, user_id)
         if not knowledge_bases:
             raise ValueError("No knowledge bases available")
 
@@ -88,31 +86,19 @@ class QAService:
             model_used=model_used,
         )
 
-    def stream_chat(
-        self, db: Session, request: ChatAskRequest
-    ) -> Generator[tuple[str, bool, str | None, list[CitationItem]], None, None]:
-        """
-        流式聊天。生成器协议：
-        - 首次 yield：citations（引用列表）
-        - 后续 yield：LLM 文本块 或 模型名称标记
-        """
-        repo = KBRepo(db)
-        knowledge_bases = repo.get_all_kbs()
+    def retrieve_for_chat(
+        self, db: Session, question: str, user_id: int, top_k: int | None = None
+    ) -> dict:
+        """仅检索，不生成答案。返回 {"citations": list[CitationItem], "contexts": list[str]}"""
+        knowledge_bases = self._get_accessible_kbs(db, user_id)
         if not knowledge_bases:
-            raise ValueError("No knowledge bases available")
+            return {"citations": [], "contexts": []}
 
-        top_k = request.top_k or settings.DEFAULT_RETRIEVAL_TOP_K
-
-        docs = self._make_retriever(db, None, top_k).invoke(request.question)
+        effective_top_k = top_k or settings.DEFAULT_RETRIEVAL_TOP_K
+        docs = self._make_retriever(db, None, effective_top_k).invoke(question)
         citations = [self._doc_to_citation(doc) for doc in docs]
         contexts = [self._doc_to_context(doc) for doc in docs]
-
-        # First: send citations in one shot
-        yield "", False, None, citations
-
-        # Then: stream answer chunks
-        for chunk, is_model_info, model_name in llm_service.stream_answer(request.question, contexts):
-            yield chunk, is_model_info, model_name, []
+        return {"citations": citations, "contexts": contexts}
 
     # ------------------------------------------------------------------
     # BM25-style keyword extraction
@@ -162,7 +148,7 @@ class QAService:
                 _enable_rerank = _kb.enable_rerank
 
         def retrieve(question: str) -> list[Document]:
-            query_vector = get_embeddings().embed_query(question)
+            query_vector = embeddings.get_embeddings().embed_query(question)
             kb_repo = KBRepo(db)
             file_repo = FileRepo(db)
 
@@ -319,8 +305,11 @@ class QAService:
         )
 
     def _resolve_target_kb_ids(
-        self, repo: KBRepo, kb_id: int | None, kb_ids: list[int]
+        self, db: Session, repo: KBRepo, kb_id: int | None, kb_ids: list[int], user_id: int
     ) -> list[int]:
+        from core.exceptions import PermissionDeniedError, ResourceNotFoundError
+        from services.kb_access_service import kb_access_service
+
         normalized_ids = list(dict.fromkeys([*kb_ids, *([kb_id] if kb_id else [])]))
         if not normalized_ids:
             raise ValueError("At least one knowledge base must be selected")
@@ -329,8 +318,25 @@ class QAService:
         if len(kbs) != len(set(normalized_ids)):
             found_ids = {kb.id for kb in kbs}
             missing_ids = [item for item in normalized_ids if item not in found_ids]
-            raise ValueError(f"Knowledge bases not found: kb_ids={missing_ids}")
+            raise ResourceNotFoundError(f"Knowledge bases not found: kb_ids={missing_ids}")
+        accessible_kb_ids = kb_access_service.get_accessible_kb_ids(db, user_id)
+        if accessible_kb_ids is not None:
+            denied = [item for item in normalized_ids if item not in accessible_kb_ids]
+            if denied:
+                raise PermissionDeniedError(f"Knowledge bases not accessible: kb_ids={denied}")
         return [kb.id for kb in kbs]
+
+    @staticmethod
+    def _get_accessible_kbs(db: Session, user_id: int):
+        from services.kb_access_service import kb_access_service
+
+        repo = KBRepo(db)
+        accessible_kb_ids = kb_access_service.get_accessible_kb_ids(db, user_id)
+        if accessible_kb_ids is None:
+            return repo.get_all_kbs()
+        if not accessible_kb_ids:
+            return []
+        return repo.get_kbs_by_ids(accessible_kb_ids)
 
 
 

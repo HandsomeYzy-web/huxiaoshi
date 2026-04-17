@@ -18,8 +18,6 @@ export interface ChatMessage {
   model_used?: string | null
   retrieved_count?: number
   citations?: ChatCitation[]
-  intent?: string | null
-  generated_sql?: string | null
   sql_result_json?: string | null
   created_at: string
 }
@@ -51,43 +49,85 @@ export interface ChatMessageCreateResponse {
   involved_documents: ChatDocumentItem[]
 }
 
-// 流式响应事件类型
 export interface StreamEvent {
-  event: 'user_message' | 'session_info' | 'intent' | 'status' | 'citations' | 'sql' | 'sql_result' | 'delta' | 'done' | 'error'
+  event: 'user_message' | 'session_info' | 'status' | 'citations' | 'sql_result' | 'delta' | 'done' | 'error'
   data: any
 }
 
-// 意图分类数据
-export interface IntentData {
-  intent: 'casual_chat' | 'data_query' | 'doc_search'
-  confidence: number
-  reason: string
-}
-
-// 状态步骤数据
 export interface StatusData {
   step: string
   message: string
 }
 
-// SQL 查询结果数据
 export interface SqlResultData {
   columns: string[]
   rows: Record<string, any>[]
 }
 
-// 流式响应处理器
 export interface StreamHandlers {
   onUserMessage?: (message: { id: number; content: string; created_at: string }) => void
   onSessionInfo?: (session: { id: number; title: string; updated_at: string }) => void
-  onIntent?: (data: IntentData) => void
   onStatus?: (data: StatusData) => void
   onCitations?: (citations: ChatCitation[]) => void
-  onSql?: (data: { sql: string }) => void
   onSqlResult?: (data: SqlResultData) => void
   onDelta?: (content: string) => void
-  onDone?: (message: { id: number; content: string; model_used: string | null; retrieved_count: number; intent: string; created_at: string }) => void
+  onDone?: (message: { id: number; content: string; model_used: string | null; retrieved_count: number; created_at: string }) => void
   onError?: (error: { message: string }) => void
+}
+
+const dispatchStreamEvent = (event: string | null, payload: any, handlers: StreamHandlers) => {
+  switch (event) {
+    case 'user_message':
+      handlers.onUserMessage?.(payload)
+      break
+    case 'session_info':
+      handlers.onSessionInfo?.(payload)
+      break
+    case 'status':
+      handlers.onStatus?.(payload)
+      break
+    case 'citations':
+      handlers.onCitations?.(payload)
+      break
+    case 'sql_result':
+      handlers.onSqlResult?.(payload)
+      break
+    case 'delta':
+      handlers.onDelta?.(payload.content)
+      break
+    case 'done':
+      handlers.onDone?.(payload)
+      break
+    case 'error':
+      handlers.onError?.(payload)
+      break
+  }
+}
+
+const parseSseFrame = (frame: string, handlers: StreamHandlers) => {
+  const lines = frame.split(/\r?\n/)
+  let event: string | null = null
+  const dataLines: string[] = []
+
+  for (const rawLine of lines) {
+    if (!rawLine || rawLine.startsWith(':')) continue
+    if (rawLine.startsWith('event:')) {
+      event = rawLine.slice(6).trim()
+      continue
+    }
+    if (rawLine.startsWith('data:')) {
+      dataLines.push(rawLine.slice(5).trimStart())
+    }
+  }
+
+  if (!event || !dataLines.length) return
+
+  const dataText = dataLines.join('\n')
+  try {
+    dispatchStreamEvent(event, JSON.parse(dataText), handlers)
+  } catch (error) {
+    console.error('解析 SSE 数据失败:', error, dataText)
+  }
 }
 
 export const listChatSessions = () =>
@@ -102,17 +142,10 @@ export const getChatSessionDetail = (sessionId: number) =>
 export const appendChatMessage = (sessionId: number, question: string) =>
   request.post<any, ChatMessageCreateResponse>(`/chat/sessions/${sessionId}/messages`, { question })
 
-/**
- * 流式发送消息
- * @param sessionId 会话ID
- * @param question 问题内容
- * @param handlers 事件处理器
- * @returns 返回 abort 函数用于取消请求
- */
 export const appendChatMessageStream = (
   sessionId: number,
   question: string,
-  handlers: StreamHandlers
+  handlers: StreamHandlers,
 ): (() => void) => {
   const abortController = new AbortController()
 
@@ -123,8 +156,8 @@ export const appendChatMessageStream = (
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Accept': 'text/event-stream',
-          ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+          Accept: 'text/event-stream',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
         body: JSON.stringify({ question }),
         signal: abortController.signal,
@@ -137,10 +170,10 @@ export const appendChatMessageStream = (
       }
 
       const reader = response.body?.getReader()
-      const decoder = new TextDecoder()
+      const decoder = new TextDecoder('utf-8')
 
       if (!reader) {
-        handlers.onError?.({ message: '无法读取响应流' })
+        handlers.onError?.({ message: '无法读取流式响应' })
         return
       }
 
@@ -151,69 +184,24 @@ export const appendChatMessageStream = (
         if (done) break
 
         buffer += decoder.decode(value, { stream: true })
+        const frames = buffer.split(/\r?\n\r?\n/)
+        buffer = frames.pop() || ''
 
-        // 处理 SSE 格式的数据
-        const lines = buffer.split('\n')
-        buffer = lines.pop() || '' // 保留不完整的最后一行
-
-        let currentEvent: string | null = null
-
-        for (const line of lines) {
-          const trimmedLine = line.trim()
-          if (trimmedLine.startsWith('event:')) {
-            currentEvent = trimmedLine.slice(6).trim()
-          } else if (trimmedLine.startsWith('data:')) {
-            const dataStr = trimmedLine.slice(5).trim()
-            try {
-              const data = JSON.parse(dataStr)
-
-              switch (currentEvent) {
-                case 'user_message':
-                  handlers.onUserMessage?.(data)
-                  break
-                case 'session_info':
-                  handlers.onSessionInfo?.(data)
-                  break
-                case 'intent':
-                  handlers.onIntent?.(data)
-                  break
-                case 'status':
-                  handlers.onStatus?.(data)
-                  break
-                case 'citations':
-                  handlers.onCitations?.(data)
-                  break
-                case 'sql':
-                  handlers.onSql?.(data)
-                  break
-                case 'sql_result':
-                  handlers.onSqlResult?.(data)
-                  break
-                case 'delta':
-                  handlers.onDelta?.(data.content)
-                  break
-                case 'done':
-                  handlers.onDone?.(data)
-                  break
-                case 'error':
-                  handlers.onError?.(data)
-                  break
-              }
-            } catch (e) {
-              console.error('解析 SSE 数据失败:', e, dataStr)
-            }
-          }
+        for (const frame of frames) {
+          parseSseFrame(frame, handlers)
         }
       }
-    } catch (error: any) {
-      if (error.name === 'AbortError') {
-        return // 用户取消，不视为错误
+
+      if (buffer.trim()) {
+        parseSseFrame(buffer, handlers)
       }
+    } catch (error: any) {
+      if (error.name === 'AbortError') return
       handlers.onError?.({ message: error.message || '网络请求失败' })
     }
   }
 
-  fetchStream()
+  void fetchStream()
 
   return () => abortController.abort()
 }

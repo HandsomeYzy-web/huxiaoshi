@@ -10,7 +10,7 @@ export interface ApiResponse<T = unknown> {
 
 const service: AxiosInstance = axios.create({
   baseURL: '/api/v1',
-  timeout: 50000
+  timeout: 50000,
 })
 
 service.interceptors.request.use(
@@ -21,7 +21,7 @@ service.interceptors.request.use(
     }
     return config
   },
-  (error: unknown) => Promise.reject(error)
+  (error: unknown) => Promise.reject(error),
 )
 
 service.interceptors.response.use(
@@ -41,13 +41,14 @@ service.interceptors.response.use(
       }
       return Promise.reject(error)
     }
+
     const message =
       error?.response?.data?.message ||
       error?.message ||
-      '网络异常，请检查后端服务是否启动'
+      '网络异常，请检查后端服务是否已启动'
     ElMessage.error(message)
     return Promise.reject(error)
-  }
+  },
 )
 
 export default service

@@ -4,7 +4,7 @@
       <div class="auth-header">
         <div class="brand-mark">QA</div>
         <h2>登录</h2>
-        <p>知识库智能问答系统</p>
+        <p>进入知识库问答与权限管理工作台</p>
       </div>
 
       <el-form
@@ -50,7 +50,7 @@
 import { reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import type { FormInstance, FormRules } from 'element-plus'
-import { ElMessage } from 'element-plus'
+
 import { useAuthStore } from '../../stores/auth'
 
 const router = useRouter()
@@ -70,14 +70,12 @@ const rules: FormRules = {
 }
 
 async function handleLogin() {
-  await formRef.value?.validate(async (valid) => {
+  await formRef.value?.validate(async valid => {
     if (!valid) return
     loading.value = true
     try {
       await authStore.login({ username: form.username, password: form.password })
       router.push('/')
-    } catch {
-      // error handled by request interceptor
     } finally {
       loading.value = false
     }

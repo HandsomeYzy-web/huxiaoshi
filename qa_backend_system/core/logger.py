@@ -2,11 +2,13 @@
 
 import os
 import sys
+
 from loguru import logger
 
 # 确保 logs 目录存在
 LOG_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "logs")
 os.makedirs(LOG_DIR, exist_ok=True)
+
 
 def setup_logger():
     """初始化日志系统：配置控制台彩色输出、Info 日志文件、Error 独立日志文件。"""
@@ -17,7 +19,12 @@ def setup_logger():
     logger.add(
         sys.stdout,
         level="DEBUG",
-        format="<green>{time:YYYY-MM-DD HH:mm:ss.SSS}</green> | <level>{level: <8}</level> | <cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> - <level>{message}</level>"
+        format=(
+            "<green>{time:YYYY-MM-DD HH:mm:ss.SSS}</green> | "
+            "<level>{level: <8}</level> | "
+            "<cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> - "
+            "<level>{message}</level>"
+        ),
     )
 
     # 2. 常规日志文件存储 (Info 及以上级别)
@@ -41,5 +48,3 @@ def setup_logger():
         backtrace=True,        # 记录完整的异常堆栈
         diagnose=False          # 关闭变量诊断，防止敏感数据泄露到日志
     )
-
-# 在 main.py 启动时调用 setup_logger() 即可

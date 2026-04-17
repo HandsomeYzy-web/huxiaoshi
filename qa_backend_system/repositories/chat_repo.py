@@ -88,3 +88,14 @@ class ChatRepo:
             .order_by(ChatMessage.created_at.asc())
         )
         return list(self.db.scalars(stmt).all())
+
+    def list_recent_chat_messages(self, session_id: int, limit: int) -> list[ChatMessage]:
+        stmt = (
+            select(ChatMessage)
+            .where(ChatMessage.session_id == session_id)
+            .order_by(ChatMessage.created_at.desc(), ChatMessage.id.desc())
+            .limit(limit)
+        )
+        messages = list(self.db.scalars(stmt).all())
+        messages.reverse()
+        return messages
