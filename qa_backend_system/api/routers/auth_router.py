@@ -12,7 +12,7 @@ from services.role_service import role_service
 
 router = APIRouter(prefix="/auth", tags=["Auth"])
 
-
+# TODO:这里只有success是否合理
 @router.post("/register", response_model=UnifiedResponse[UserInfo], summary="Register")
 async def register(request: RegisterRequest, db: Session = Depends(get_db)):
     return success(data=auth_service.register(db, request), message="Registered")
@@ -25,6 +25,7 @@ async def login(request: LoginRequest, db: Session = Depends(get_db)):
 
 @router.get("/me", response_model=UnifiedResponse[UserInfo], summary="Current user")
 async def get_me(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    # TODO:为什么不写进service里
     user_data = UserInfo.model_validate(current_user)
     user_perms = role_service.get_user_permissions(db, current_user.id)
     user_data.permissions = sorted(user_perms)

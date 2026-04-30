@@ -9,7 +9,7 @@ from core.security import decode_access_token
 from models.entities.user import User
 from repositories.user_repo import UserRepo
 
-
+# TODO:如果用户量很大怎么办，引入redis
 def get_current_user(
     authorization: Optional[str] = Header(None),
     db: Session = Depends(get_db),
@@ -25,7 +25,7 @@ def get_current_user(
         raise AuthenticationError("用户不存在或已被禁用")
     return user
 
-
+# TODO:同上
 def require_permission(permission_code: str):
     def checker(
         current_user: User = Depends(get_current_user),

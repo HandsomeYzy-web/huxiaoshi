@@ -22,7 +22,8 @@ class KBAccessService:
         kbs = KBRepo(db).get_all_kbs()
         access_map = KBAccessRepo(db).get_kb_access_map([kb.id for kb in kbs])
         return [{"kb_id": kb_id, "accessible_role_ids": role_ids} for kb_id, role_ids in access_map.items()]
-
+    
+    # TODO： 重构这个函数和下面的函数，以及其下游调用链，之后采用role控制kb访问权限，用户只能通过角色获得访问权限，不再区分拥有和被授权的知识库
     def can_access_kb(self, db: Session, user_id: int, kb_id: int) -> bool:
         user = UserRepo(db).get_by_id(user_id)
         if not user:

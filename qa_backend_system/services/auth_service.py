@@ -21,8 +21,9 @@ class AuthService:
             hashed_password=get_password_hash(request.password),
         )
         created = repo.create_user(user)
+        # TODO：这一步失败是否原子性无法保证
         role_service.ensure_default_role(db, created.id)
-
+        # TODO：检查为什么注册要返回用户权限，有必要返回吗
         user_info = UserInfo.model_validate(created)
         user_info.permissions = sorted(role_service.get_user_permissions(db, created.id))
         user_info.roles = role_service.get_user_role_names(db, created.id)

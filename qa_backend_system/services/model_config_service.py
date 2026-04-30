@@ -55,7 +55,7 @@ class ModelConfigService:
         if not config:
             raise ResourceNotFoundError(f"模型配置 ID={config_id} 不存在")
         return _to_response(config)
-
+    # TODO:这里如果创建了设置为激活的embedding模型怎么办，同时如果激活了新的，关闭了旧的模型配置也没有清除模型的缓存
     def create_config(self, db: Session, req: ModelConfigCreate) -> ModelConfigResponse:
         if req.model_type not in SUPPORTED_MODEL_TYPES:
             raise BusinessError(f"不支持的模型类型: {req.model_type}，支持: {SUPPORTED_MODEL_TYPES}")
@@ -81,7 +81,7 @@ class ModelConfigService:
         created = repo.create(config)
         logger.info(f"Created model config: {created.name} ({created.model_type})")
         return _to_response(created)
-
+    # TODO:这里的问题同上，如果激活的是embedding模型，应该提示用户重建知识库，并提供一键重建的功能
     def update_config(self, db: Session, config_id: int, req: ModelConfigUpdate) -> ModelConfigResponse:
         repo = ModelConfigRepo(db)
         config = repo.get_by_id(config_id)
@@ -196,7 +196,8 @@ class ModelConfigService:
             reset_embeddings()
         elif model_type == "rerank":
             pass  # Reranker 每次调用时重新解析配置
-
+    
+    # 保证操作的原子性
     @staticmethod
     def rebuild_all_knowledge_bases(db: Session) -> dict:
         """
