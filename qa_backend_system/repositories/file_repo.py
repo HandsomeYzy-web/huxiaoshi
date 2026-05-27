@@ -109,6 +109,15 @@ class FileRepo:
         self.db.execute(stmt)
         self.db.commit()
 
+    def delete_chunk_by_id(self, chunk_id: int, file_id: int) -> bool:
+        """删除单个文档切片，返回是否成功找到并删除。"""
+        chunk = self.db.get(DocumentChunk, chunk_id)
+        if not chunk or chunk.file_id != file_id:
+            return False
+        self.db.delete(chunk)
+        self.db.commit()
+        return True
+
     def get_chunks_by_ids(self, chunk_ids: Iterable[int]) -> list[DocumentChunk]:
         chunk_ids = list(chunk_ids)
         if not chunk_ids:
@@ -131,7 +140,12 @@ class FileRepo:
         )
         return list(self.db.scalars(stmt).all()), total
 
-    # TODO:引入elasticsearch 后可以废弃基于 MySQL LIKE 的关键词搜索，改为 ES 搜索并返回对应的 chunk_id 列表，再批量查询 DocumentChunk 实体返回给上层。
+    # BM25 关键词搜索（当前版本）：基于 MySQL LIKE 实现，性能有限。
+    # 迁移计划：引入 Elasticsearch 后，将此方法替换为 ES 全文搜索：
+    #   1. 文件解析完成后，将 DocumentChunk 同步写入 ES 索引（kb_id 分片）
+    #   2. search_chunks_by_keyword 改为调用 ES client.search()，返回 chunk_id 列表
+    #   3. 再通过 get_chunks_by_ids() 批量查询完整实体返回上层
+    #   4. 迁移完成后可删除下方 MySQL LIKE 实现及 _escape_like 方法
     @staticmethod
     def _escape_like(keyword: str) -> str:
         """Escape special LIKE characters to prevent injection."""

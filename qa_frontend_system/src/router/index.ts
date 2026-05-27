@@ -63,9 +63,38 @@ const routes: RouteRecordRaw[] = [
       },
       {
         path: 'admin',
-        name: 'Admin',
-        component: () => import('../views/admin/index.vue'),
+        redirect: ROUTE_PATHS.adminRoles,
         meta: { title: '系统管理', section: 'admin', permission: ACCESS_CODES.admin },
+      },
+      {
+        path: 'admin/roles',
+        name: 'AdminRoles',
+        component: () => import('../views/admin/index.vue'),
+        meta: { title: '角色管理', section: 'admin', permission: ACCESS_CODES.adminRole },
+      },
+      {
+        path: 'admin/users',
+        name: 'AdminUsers',
+        component: () => import('../views/admin/index.vue'),
+        meta: { title: '用户管理', section: 'admin', permission: ACCESS_CODES.adminUser },
+      },
+      {
+        path: 'admin/permissions',
+        name: 'AdminPermissions',
+        component: () => import('../views/admin/index.vue'),
+        meta: { title: '权限管理', section: 'admin', permission: ACCESS_CODES.adminPermission },
+      },
+      {
+        path: 'admin/kb-access',
+        name: 'AdminKbAccess',
+        component: () => import('../views/admin/index.vue'),
+        meta: { title: '知识库访问', section: 'admin', permission: ACCESS_CODES.adminKbAccess },
+      },
+      {
+        path: 'admin/models',
+        name: 'AdminModels',
+        component: () => import('../views/admin/index.vue'),
+        meta: { title: '模型配置', section: 'admin', permission: ACCESS_CODES.adminModel },
       },
     ],
   },
@@ -97,6 +126,16 @@ router.beforeEach(async to => {
   await authStore.init()
 
   if (!authStore.user) return ROUTE_PATHS.login
+
+  // 纯聊天用户（无工作台/管理权限）直接进入聊天界面
+  const hasWorkspaceOrAdmin =
+    authStore.hasPermission(ACCESS_CODES.workspace) ||
+    authStore.hasPermission(ACCESS_CODES.admin)
+  if (!hasWorkspaceOrAdmin && authStore.hasPermission(ACCESS_CODES.chatUse)) {
+    if (to.path !== ROUTE_PATHS.chat) return ROUTE_PATHS.chat
+    return
+  }
+
   if (
     !canAccessRoute(
       {

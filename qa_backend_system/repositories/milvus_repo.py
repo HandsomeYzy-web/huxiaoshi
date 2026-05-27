@@ -131,10 +131,24 @@ class MilvusRepo:
             self.ensure_collection(kb_id)
             self._load_collection(collection_name)
             self.client.delete(collection_name, filter=f"file_id == {file_id}")
+            self.client.flush(collection_name)
             logger.info(f"Deleted Milvus vectors for file_id={file_id} in {collection_name}")
         except Exception as e:
             logger.error(f"Milvus 删除失败 (file_id={file_id}): {e}")
             raise ExternalServiceError(f"向量库删除失败: file_id={file_id}")
+
+    def delete_chunk_by_chunk_id(self, kb_id: int, chunk_id: int):
+        """删除指定切片在 Milvus 中的向量数据。"""
+        try:
+            collection_name = self._collection_name(kb_id)
+            self.ensure_collection(kb_id)
+            self._load_collection(collection_name)
+            self.client.delete(collection_name, filter=f"chunk_id == {chunk_id}")
+            self.client.flush(collection_name)
+            logger.info(f"Deleted Milvus vector for chunk_id={chunk_id} in {collection_name}")
+        except Exception as e:
+            logger.error(f"Milvus 切片删除失败 (chunk_id={chunk_id}): {e}")
+            raise ExternalServiceError(f"向量库删除失败: chunk_id={chunk_id}")
 
     def delete_chunks_by_kb_id(self, kb_id: int):
         """删除整个知识库对应的 Milvus collection（用于知识库删除或重建）。"""

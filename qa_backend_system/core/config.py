@@ -62,12 +62,14 @@ class Settings(BaseSettings):
     JWT_EXPIRE_MINUTES: int = 60 * 24 * 7  # 7天
 
     # ── File Upload ───────────────────────────────────────────────
+    # 仅支持核心文档格式：源文件存 MinIO，向量+分段存 Milvus，分段元数据存 MySQL
+    # 不支持图片、音视频、epub、json、xml 等非文本格式
     MAX_UPLOAD_FILE_SIZE_MB: int = 200
     ALLOWED_FILE_TYPES: List[str] = [
-        "pdf", "docx", "doc", "xlsx", "xls", "csv",
-        "pptx", "ppt", "txt", "md", "html", "htm",
-        "png", "jpg", "jpeg", "bmp", "tiff", "webp",
-        "json", "xml", "rst", "rtf", "epub",
+        "pdf", "docx",
+        "xlsx", "csv",
+        "pptx",
+        "txt", "md",
     ]
 
     # ── Text2SQL (业务数据库，非模型配置) ────────────────────────

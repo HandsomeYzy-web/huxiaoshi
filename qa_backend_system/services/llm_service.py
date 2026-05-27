@@ -202,6 +202,25 @@ class LLMService:
                 logger.error(f"Non-streaming fallback also failed: {fallback_err}")
                 yield f"生成回答失败，请检查模型配置是否正确: {fallback_err}", False, None
 
+    def rewrite_query(self, question: str, history: list[tuple[str, str]]) -> str:
+        """根据对话历史改写用户查询，使其不依赖上下文即可独立理解。
+        无历史或 LLM 未配置时返回原始问题。
+        """
+        if self.model is None or not history:
+            return question
+        history_text = "\n".join(f"用户: {q}\n助手: {a}" for q, a in history[-3:])
+        rewrite_prompt = ChatPromptTemplate.from_messages([
+            ("system", "你是一个查询改写助手。根据对话历史，将用户的当前问题改写为一个独立、清晰的完整问题，使其不依赖上下文也能被理解。只返回改写后的问题，不要包含任何解释。"),
+            ("human", "对话历史：\n{history}\n\n当前问题：{question}\n\n改写后的问题："),
+        ])
+        try:
+            chain = rewrite_prompt | self.model | self.output_parser
+            rewritten = chain.invoke({"history": history_text, "question": question})
+            return rewritten.strip() if rewritten and rewritten.strip() else question
+        except Exception as exc:
+            logger.warning(f"Query rewrite failed: {exc}")
+            return question
+
     # ------------------------------------------------------------------
     # Merged answer (combine doc_search + text2sql results)
     # ------------------------------------------------------------------

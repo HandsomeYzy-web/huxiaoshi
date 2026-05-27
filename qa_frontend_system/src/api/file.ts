@@ -66,3 +66,6 @@ export const deleteFile = (fileId: number) =>
 
 export const getFileChunks = (fileId: number, params?: { page?: number; page_size?: number }) =>
   request.get<any, ChunkPageResponse>(`/file/${fileId}/chunks`, { params })
+
+export const renameFile = (fileId: number, newName: string) =>
+  request.put<any, KnowledgeFile>(`/file/${fileId}/rename`, { new_name: newName })

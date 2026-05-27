@@ -77,14 +77,17 @@ import {
   DataAnalysis,
   Files,
   FolderOpened,
+  Key,
+  Lock,
   Setting,
+  Share,
   User,
   UserFilled,
 } from '@element-plus/icons-vue'
 
 import { getSectionLabel } from '../../access/control'
 import type { PermissionTreeNode } from '../../api/admin'
-import { APP_TITLES, ROUTE_PATHS } from '../../constants/access'
+import { ACCESS_CODES, APP_TITLES, ROUTE_PATHS } from '../../constants/access'
 import { useAuthStore } from '../../stores/auth'
 
 const route = useRoute()
@@ -97,24 +100,59 @@ const iconMap: Record<string, unknown> = {
   DataAnalysis,
   Files,
   FolderOpened,
+  Key,
+  Lock,
   Setting,
+  Share,
   UserFilled,
   User,
 }
+
+// 固定的 admin 子菜单项（按权限过滤）
+const adminSubItems = computed<PermissionTreeNode[]>(() => {
+  const defs: { code: string; name: string; path: string; icon: string; permission: string }[] = [
+    { code: ACCESS_CODES.adminRole, name: '角色管理', path: ROUTE_PATHS.adminRoles, icon: 'Key', permission: 'role.view' },
+    { code: ACCESS_CODES.adminUser, name: '用户管理', path: ROUTE_PATHS.adminUsers, icon: 'User', permission: 'user.view' },
+    { code: ACCESS_CODES.adminPermission, name: '权限管理', path: ROUTE_PATHS.adminPermissions, icon: 'Lock', permission: 'permission.view' },
+    { code: ACCESS_CODES.adminKbAccess, name: '知识库访问', path: ROUTE_PATHS.adminKbAccess, icon: 'Share', permission: 'kb_access.view' },
+    { code: ACCESS_CODES.adminModel, name: '模型配置', path: ROUTE_PATHS.adminModels, icon: 'Setting', permission: 'model.view' },
+  ]
+  return defs
+    .filter(d => authStore.hasPermission(d.permission))
+    .map(d => ({
+      code: d.code,
+      name: d.name,
+      description: null,
+      parent_code: ACCESS_CODES.admin,
+      module: 'admin',
+      icon: d.icon,
+      path: d.path,
+      type: 'menu',
+      status: 'active',
+      sort: 0,
+      children: [],
+    }))
+})
 
 /**
  * 从权限树构建菜单：
  * - Level 1 带 path 的节点作为菜单分组
  * - Level 2 带 path 的子节点作为菜单项
  * - 过滤掉 chat 分组（chat 有独立页面不在 layout 内）
+ * - admin 节点的子菜单使用前端固定配置
  */
 const menuTree = computed<PermissionTreeNode[]>(() => {
   return authStore.permissionTree
     .filter(node => node.code !== 'chat' && node.path)
-    .map(node => ({
-      ...node,
-      children: (node.children || []).filter(child => child.path),
-    }))
+    .map(node => {
+      if (node.code === ACCESS_CODES.admin) {
+        return { ...node, children: adminSubItems.value }
+      }
+      return {
+        ...node,
+        children: (node.children || []).filter(child => child.path),
+      }
+    })
 })
 
 const currentTitle = computed(() => String(route.meta.title || APP_TITLES.workspace))

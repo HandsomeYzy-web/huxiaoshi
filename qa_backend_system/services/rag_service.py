@@ -21,6 +21,8 @@ from repositories.milvus_repo import milvus_repo
 from repositories.minio_repo import minio_repo
 from services.embeddings import get_embeddings
 
+# TODO：这里需要进行重构，后续不再支持IMAGE_EXTENSIONS，去config中查看TODO中后续要支持的类型，同时minio中只存储源文件，milvus中只存储文本块和向量（即将文件中ocr识别的内容），
+
 # ── Image file extensions handled as pure images (OCR/description) ────
 IMAGE_EXTENSIONS = {"png", "jpg", "jpeg", "bmp", "tiff", "webp", "gif"}
 

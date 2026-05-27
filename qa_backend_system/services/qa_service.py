@@ -1,16 +1,13 @@
 """
-QA 服务层 — 混合检索增强生成（RAG）管道。
+QA 服务层 — 检索增强生成（RAG）管道。
 
-结合向量查询（Milvus）和 BM25 关键词搜索（MySQL），
-通过 RRF 融合、去重、Rerank 精排后返回最终结果集。
+使用向量查询（Milvus）进行语义检索，可选 Rerank 精排后返回最终结果集。
 
 The retrieval step is encapsulated as a LangChain RunnableLambda so it can be
 composed into any LCEL chain.
 """
 from __future__ import annotations
 
-import re
-from collections import defaultdict
 
 from langchain_core.documents import Document
 from langchain_core.runnables import RunnableLambda
@@ -26,6 +23,7 @@ from models.schemas.qa_schema import (
 )
 from repositories.kb_repo import KBRepo
 from repositories.file_repo import FileRepo
+from repositories.kb_access_repo import get_accessible_kb_ids
 from repositories.milvus_repo import milvus_repo
 from services import embeddings
 from services.llm_service import llm_service
@@ -65,14 +63,13 @@ class QAService:
         )
 
     def chat(self, db: Session, request: ChatAskRequest, user_id: int) -> ChatAskResponse:
-        knowledge_bases = self._get_accessible_kbs(db, user_id)
-        if not knowledge_bases:
+        accessible_ids = get_accessible_kb_ids(db, user_id)
+        if not accessible_ids:
             raise ValueError("No knowledge bases available")
 
-        kb_map = {kb.id: kb for kb in knowledge_bases}
         top_k = request.top_k or settings.DEFAULT_RETRIEVAL_TOP_K
 
-        docs = self._make_retriever(db, None, top_k).invoke(request.question)
+        docs = self._make_retriever(db, accessible_ids, top_k).invoke(request.question)
         citations = [self._doc_to_citation(doc) for doc in docs]
         contexts = [self._doc_to_context(doc) for doc in docs]
 
@@ -81,8 +78,8 @@ class QAService:
             answer=answer,
             citations=citations,
             retrieved_count=len(citations),
-            queried_kb_count=len(kb_map),
-            queried_kb_ids=list(kb_map.keys()),
+            queried_kb_count=len(accessible_ids),
+            queried_kb_ids=accessible_ids,
             model_used=model_used,
         )
 
@@ -90,32 +87,55 @@ class QAService:
         self, db: Session, question: str, user_id: int, top_k: int | None = None
     ) -> dict:
         """仅检索，不生成答案。返回 {"citations": list[CitationItem], "contexts": list[str]}"""
-        knowledge_bases = self._get_accessible_kbs(db, user_id)
-        if not knowledge_bases:
+        accessible_ids = get_accessible_kb_ids(db, user_id)
+        if not accessible_ids:
             return {"citations": [], "contexts": []}
 
         effective_top_k = top_k or settings.DEFAULT_RETRIEVAL_TOP_K
-        docs = self._make_retriever(db, None, effective_top_k).invoke(question)
+        docs = self._make_retriever(db, accessible_ids, effective_top_k).invoke(question)
         citations = [self._doc_to_citation(doc) for doc in docs]
         contexts = [self._doc_to_context(doc) for doc in docs]
         return {"citations": citations, "contexts": contexts}
 
-    # ------------------------------------------------------------------
-    # BM25-style keyword extraction
-    # ------------------------------------------------------------------
+    def retrieve_for_chat_with_context(
+        self,
+        db: Session,
+        question: str,
+        rewritten_question: str,
+        user_id: int,
+        top_k: int | None = None,
+    ) -> dict:
+        """使用原始 query 和改写 query 分别检索知识库，合并去重后返回最终结果。
+        返回 {"citations": list[CitationItem], "contexts": list[str]}
+        """
+        accessible_ids = get_accessible_kb_ids(db, user_id)
+        if not accessible_ids:
+            return {"citations": [], "contexts": []}
 
-    @staticmethod
-    def _extract_keywords(question: str) -> list[str]:
-        """Extract meaningful keywords from the question for BM25 keyword search."""
-        # Remove common Chinese stop words and punctuation, split into tokens
-        # Simple approach: split by non-word chars, filter short tokens
-        tokens = re.findall(r'[\u4e00-\u9fff]+|[a-zA-Z0-9]+', question)
-        # Filter out very short tokens (single char Chinese, very short english)
-        keywords = [t for t in tokens if len(t) >= 2]
-        return keywords[:5]  # Limit to top 5 keywords
+        effective_top_k = top_k or settings.DEFAULT_RETRIEVAL_TOP_K
+        retriever = self._make_retriever(db, accessible_ids, effective_top_k)
+
+        original_docs = retriever.invoke(question)
+        rewritten_docs = (
+            retriever.invoke(rewritten_question)
+            if rewritten_question and rewritten_question != question
+            else []
+        )
+
+        # 按 chunk_id 去重，原始查询结果优先
+        seen: dict[int, Document] = {}
+        for doc in original_docs + rewritten_docs:
+            chunk_id = doc.metadata.get("chunk_id")
+            if chunk_id is not None and chunk_id not in seen:
+                seen[chunk_id] = doc
+
+        final_docs = list(seen.values())[:effective_top_k]
+        citations = [self._doc_to_citation(doc) for doc in final_docs]
+        contexts = [self._doc_to_context(doc) for doc in final_docs]
+        return {"citations": citations, "contexts": contexts}
 
     # ------------------------------------------------------------------
-    # LangChain retriever factory (hybrid: vector + BM25)
+    # LangChain retriever factory (pure vector RAG)
     # ------------------------------------------------------------------
 
     def _make_retriever(
@@ -126,11 +146,9 @@ class QAService:
         score_threshold: float = 0.0,
     ) -> RunnableLambda:
         """
-        Returns a LangChain RunnableLambda that performs hybrid retrieval:
+        Returns a LangChain RunnableLambda that performs pure vector retrieval:
         1. Vector search via Milvus (semantic similarity)
-        2. BM25-style keyword search via MySQL (lexical matching)
-        3. Reciprocal Rank Fusion (RRF) to merge results
-        4. Optional reranking
+        2. Optional reranking
 
         When a single KB is targeted, its own retrieval_top_k / retrieval_score_threshold
         config takes precedence over the caller-supplied defaults.
@@ -153,7 +171,7 @@ class QAService:
             file_repo = FileRepo(db)
 
             # 启用 rerank 时先多取候选集
-            fetch_k = _top_k * 3 if _enable_rerank else _top_k * 2
+            fetch_k = _top_k * 3 if _enable_rerank else _top_k
 
             # ── 1. Vector search (Milvus) ─────────────────────────
             if kb_ids and len(kb_ids) == 1:
@@ -173,92 +191,33 @@ class QAService:
             if _score_threshold > 0.0:
                 vector_results = [r for r in vector_results if float(r.get("distance", 0.0)) >= _score_threshold]
 
-            # ── 2. BM25-style keyword search (MySQL) ──────────────
-            keywords = self._extract_keywords(question)
-            bm25_chunks = []
-            if keywords:
-                keyword_str = keywords[0]  # Use primary keyword for LIKE search
-                if kb_ids and len(kb_ids) == 1:
-                    bm25_chunks = file_repo.search_chunks_by_keyword(kb_ids[0], keyword_str, limit=fetch_k)
-                elif kb_ids:
-                    # Search across specific KBs
-                    for kid in kb_ids:
-                        bm25_chunks.extend(file_repo.search_chunks_by_keyword(kid, keyword_str, limit=fetch_k))
-                else:
-                    bm25_chunks = file_repo.search_chunks_by_keyword_across_kbs(keyword_str, limit=fetch_k)
-
-                # Try additional keywords if first keyword yields few results
-                if len(bm25_chunks) < 3 and len(keywords) > 1:
-                    for kw in keywords[1:3]:
-                        if kb_ids and len(kb_ids) == 1:
-                            extra = file_repo.search_chunks_by_keyword(kb_ids[0], kw, limit=fetch_k // 2)
-                        else:
-                            extra = file_repo.search_chunks_by_keyword_across_kbs(kw, limit=fetch_k // 2)
-                        seen_ids = {c.id for c in bm25_chunks}
-                        bm25_chunks.extend([c for c in extra if c.id not in seen_ids])
-
-            # ── 3. Reciprocal Rank Fusion (RRF) ──────────────────
-            # Build chunk_id -> score maps
-            rrf_k = 60  # RRF constant
-            chunk_scores: dict[int, float] = defaultdict(float)
-            chunk_data: dict[int, dict] = {}
-
-            # Vector results contribution
-            for rank, item in enumerate(vector_results):
-                entity = item["entity"]
-                chunk_id = int(entity["chunk_id"])
-                chunk_scores[chunk_id] += 1.0 / (rrf_k + rank + 1)
-                if chunk_id not in chunk_data:
-                    chunk_data[chunk_id] = {
-                        "chunk_id": chunk_id,
-                        "kb_id": int(entity["kb_id"]),
-                        "file_id": int(entity["file_id"]),
-                        "text": entity["text"],
-                        "vector_score": float(item.get("distance", 0.0)),
-                    }
-
-            # BM25 results contribution
-            for rank, chunk in enumerate(bm25_chunks):
-                chunk_id = chunk.id
-                chunk_scores[chunk_id] += 1.0 / (rrf_k + rank + 1)
-                if chunk_id not in chunk_data:
-                    chunk_data[chunk_id] = {
-                        "chunk_id": chunk_id,
-                        "kb_id": chunk.kb_id,
-                        "file_id": chunk.file_id,
-                        "text": chunk.content,
-                        "vector_score": 0.0,
-                    }
-
-            if not chunk_data:
+            if not vector_results:
                 return []
 
-            # Sort by RRF score
-            sorted_chunks = sorted(chunk_scores.items(), key=lambda x: x[1], reverse=True)
-
-            # Batch-fetch metadata from MySQL
-            kb_id_list = list({chunk_data[cid]["kb_id"] for cid, _ in sorted_chunks if cid in chunk_data})
-            file_id_list = list({chunk_data[cid]["file_id"] for cid, _ in sorted_chunks if cid in chunk_data})
+            # ── 2. Build Document list from vector results ────────
+            kb_id_list = list({int(r["entity"]["kb_id"]) for r in vector_results})
+            file_id_list = list({int(r["entity"]["file_id"]) for r in vector_results})
             kb_map = {kb.id: kb for kb in kb_repo.get_kbs_by_ids(kb_id_list)}
             file_map = {f.id: f for f in file_repo.get_files_by_ids(file_id_list)}
 
             documents: list[Document] = []
-            for chunk_id, rrf_score in sorted_chunks:
-                data = chunk_data[chunk_id]
-                kb_id = data["kb_id"]
-                file_id = data["file_id"]
+            for item in vector_results:
+                entity = item["entity"]
+                chunk_id = int(entity["chunk_id"])
+                kb_id = int(entity["kb_id"])
+                file_id = int(entity["file_id"])
                 kb = kb_map.get(kb_id)
                 file = file_map.get(file_id)
                 documents.append(
                     Document(
-                        page_content=data["text"],
+                        page_content=entity["text"],
                         metadata={
                             "chunk_id": chunk_id,
                             "kb_id": kb_id,
                             "kb_name": getattr(kb, "name", f"KB {kb_id}"),
                             "file_id": file_id,
                             "file_name": file.file_name if file else "unknown",
-                            "score": rrf_score,
+                            "score": float(item.get("distance", 0.0)),
                         },
                     )
                 )
@@ -308,7 +267,6 @@ class QAService:
         self, db: Session, repo: KBRepo, kb_id: int | None, kb_ids: list[int], user_id: int
     ) -> list[int]:
         from core.exceptions import PermissionDeniedError, ResourceNotFoundError
-        from services.kb_access_service import kb_access_service
 
         normalized_ids = list(dict.fromkeys([*kb_ids, *([kb_id] if kb_id else [])]))
         if not normalized_ids:
@@ -319,24 +277,12 @@ class QAService:
             found_ids = {kb.id for kb in kbs}
             missing_ids = [item for item in normalized_ids if item not in found_ids]
             raise ResourceNotFoundError(f"Knowledge bases not found: kb_ids={missing_ids}")
-        accessible_kb_ids = kb_access_service.get_accessible_kb_ids(db, user_id)
-        if accessible_kb_ids is not None:
-            denied = [item for item in normalized_ids if item not in accessible_kb_ids]
-            if denied:
-                raise PermissionDeniedError(f"Knowledge bases not accessible: kb_ids={denied}")
+
+        accessible_kb_ids = get_accessible_kb_ids(db, user_id)
+        denied = [item for item in normalized_ids if item not in accessible_kb_ids]
+        if denied:
+            raise PermissionDeniedError(f"Knowledge bases not accessible: kb_ids={denied}")
         return [kb.id for kb in kbs]
-
-    @staticmethod
-    def _get_accessible_kbs(db: Session, user_id: int):
-        from services.kb_access_service import kb_access_service
-
-        repo = KBRepo(db)
-        accessible_kb_ids = kb_access_service.get_accessible_kb_ids(db, user_id)
-        if accessible_kb_ids is None:
-            return repo.get_all_kbs()
-        if not accessible_kb_ids:
-            return []
-        return repo.get_kbs_by_ids(accessible_kb_ids)
 
 
 

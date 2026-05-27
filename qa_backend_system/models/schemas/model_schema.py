@@ -24,7 +24,6 @@ class ModelConfigCreate(BaseModel):
     model_name: str = Field(..., max_length=256, description="模型标识")
     api_base_url: str = Field(..., max_length=512, description="API Base URL")
     api_key: str = Field(..., max_length=512, description="API Key")
-    is_active: bool = Field(False, description="是否激活")
     extra_params: Optional[str] = Field(None, description="额外参数(JSON)")
 
 
@@ -34,7 +33,6 @@ class ModelConfigUpdate(BaseModel):
     model_name: Optional[str] = Field(None, max_length=256)
     api_base_url: Optional[str] = Field(None, max_length=512)
     api_key: Optional[str] = Field(None, max_length=512)
-    is_active: Optional[bool] = None
     extra_params: Optional[str] = None
 
 

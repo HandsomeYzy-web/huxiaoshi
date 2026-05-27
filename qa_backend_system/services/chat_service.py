@@ -28,7 +28,7 @@ from models.schemas.chat_schema import (
     ChatSessionRenameRequest,
     ChatSessionSummary,
 )
-from models.schemas.qa_schema import ChatAskRequest, CitationItem
+from models.schemas.qa_schema import CitationItem
 from repositories.chat_repo import ChatRepo
 from services.intent_service import (
     INTENT_CASUAL_CHAT,
@@ -92,6 +92,10 @@ class ChatService:
             ChatMessage(session_id=session.id, role="user", content=question, retrieved_count=0)
         )
 
+        # 加载最近对话历史，用于 query 改写
+        all_messages = repo.list_chat_messages(session.id)
+        recent_history = self._extract_history_pairs(all_messages)
+
         intent, _, _ = self._classify_intent(question)
         if intent == INTENT_CASUAL_CHAT:
             answer, model_used, citations_data, generated_sql, sql_result_json = self._handle_casual_chat(question)
@@ -99,7 +103,7 @@ class ChatService:
             answer, model_used, citations_data, generated_sql, sql_result_json = self._handle_data_query(question)
         else:
             answer, model_used, citations_data, generated_sql, sql_result_json = self._handle_doc_search(
-                db, question, user_id
+                db, question, user_id, history=recent_history
             )
 
         assistant_message = repo.create_chat_message(
@@ -160,6 +164,10 @@ class ChatService:
             },
         )
 
+        # 加载最近对话历史，用于 query 改写
+        all_messages = repo.list_chat_messages(session.id)
+        recent_history = self._extract_history_pairs(all_messages)
+
         yield _sse("status", {"step": "intent_classifying", "message": "正在分析问题意图..."})
         intent, confidence, reason = self._classify_intent(question)
         yield _sse("intent", {"intent": intent, "confidence": confidence, "reason": reason})
@@ -179,7 +187,7 @@ class ChatService:
                 for sse_frame in self._stream_data_query(question, ctx):
                     yield sse_frame
             else:
-                for sse_frame in self._stream_doc_search(db, question, user_id, ctx):
+                for sse_frame in self._stream_doc_search(db, question, user_id, ctx, history=recent_history):
                     yield sse_frame
 
             assistant_message = repo.create_chat_message(
@@ -253,15 +261,17 @@ class ChatService:
             return f"数据查询失败: {exc}", None, [], None, None
 
     def _handle_doc_search(
-        self, db: Session, question: str, user_id: int
+        self, db: Session, question: str, user_id: int, history: list[tuple[str, str]] | None = None
     ) -> tuple[str, str | None, list, str | None, str | None]:
-        qa_result = qa_service.chat(
-            db,
-            request=ChatAskRequest(question=question, top_k=settings.DEFAULT_RETRIEVAL_TOP_K),
-            user_id=user_id,
+        from services.llm_service import llm_service
+        rewritten = llm_service.rewrite_query(question, history or [])
+        retrieve_result = qa_service.retrieve_for_chat_with_context(
+            db, question, rewritten, user_id, settings.DEFAULT_RETRIEVAL_TOP_K
         )
-        citations_data = [item.model_dump() for item in qa_result.citations]
-        return qa_result.answer, qa_result.model_used, citations_data, None, None
+        citations = retrieve_result["citations"]
+        contexts = retrieve_result["contexts"]
+        answer, model_used = llm_service.generate_answer(question, contexts)
+        return answer, model_used, [c.model_dump() for c in citations], None, None
 
     def _stream_casual_chat(self, question: str, ctx: dict) -> Generator[str, None, None]:
         from services.llm_service import llm_service
@@ -320,21 +330,20 @@ class ChatService:
                 yield _sse("delta", {"content": chunk})
 
     def _stream_doc_search(
-        self, db: Session, question: str, user_id: int, ctx: dict
+        self, db: Session, question: str, user_id: int, ctx: dict, history: list[tuple[str, str]] | None = None
     ) -> Generator[str, None, None]:
         from services.llm_service import llm_service
 
-        yield _sse("status", {"step": "retrieving", "message": "正在检索知识库..."})
+        yield _sse("status", {"step": "rewriting_query", "message": "正在改写问题..."})
+        rewritten = llm_service.rewrite_query(question, history or [])
 
-        results = qa_service.retrieve_for_chat(
-            db,
-            question,
-            user_id,
-            top_k=settings.DEFAULT_RETRIEVAL_TOP_K,
+        yield _sse("status", {"step": "retrieving", "message": "正在检索知识库..."})
+        retrieve_result = qa_service.retrieve_for_chat_with_context(
+            db, question, rewritten, user_id, settings.DEFAULT_RETRIEVAL_TOP_K
         )
-        citations = results["citations"]
-        contexts = results["contexts"]
-        ctx["citations_data"] = [item.model_dump() for item in citations]
+        citations = retrieve_result["citations"]
+        contexts = retrieve_result["contexts"]
+        ctx["citations_data"] = [c.model_dump() for c in citations]
         if ctx["citations_data"]:
             yield _sse("citations", ctx["citations_data"])
 
@@ -388,6 +397,19 @@ class ChatService:
 
     def _build_title(self, question: str) -> str:
         return question[:24] + ("..." if len(question) > 24 else "")
+
+    @staticmethod
+    def _extract_history_pairs(messages: list[ChatMessage]) -> list[tuple[str, str]]:
+        """从消息列表中提取最近 3 轮用户-助手对话，用于 query 改写。"""
+        pairs: list[tuple[str, str]] = []
+        prev_user: str | None = None
+        for msg in messages:
+            if msg.role == "user":
+                prev_user = msg.content
+            elif msg.role == "assistant" and prev_user is not None:
+                pairs.append((prev_user, msg.content))
+                prev_user = None
+        return pairs[-3:]
 
 
 chat_service = ChatService()

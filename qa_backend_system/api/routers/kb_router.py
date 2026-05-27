@@ -3,7 +3,7 @@ from typing import List
 from fastapi import APIRouter, Depends, Path
 from sqlalchemy.orm import Session
 
-from api.dependencies import get_current_user, require_permission
+from api.dependencies import get_current_user, list_accessible_kb_ids, require_kb_access, require_permission
 from core.database import get_db
 from core.response import UnifiedResponse, success
 from models.entities.user import User
@@ -33,15 +33,15 @@ async def create_knowledge_base(
 )
 async def get_all_knowledge_bases(
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    accessible_kb_ids: List[int] = Depends(list_accessible_kb_ids),
 ):
-    return success(data=kb_service.list_kbs(db, current_user.id), message="Fetched knowledge bases")
+    return success(data=kb_service.list_kbs(db, accessible_kb_ids), message="Fetched knowledge bases")
 
 
 @router.delete(
     "/{kb_id}",
     response_model=UnifiedResponse[None],
-    dependencies=[Depends(require_permission("kb.delete"))],
+    dependencies=[Depends(require_permission("kb.delete")), Depends(require_kb_access)],
 )
 async def delete_knowledge_base(
     kb_id: int = Path(..., description="Knowledge base ID"),
@@ -55,7 +55,7 @@ async def delete_knowledge_base(
 @router.patch(
     "/{kb_id}",
     response_model=UnifiedResponse[KBResponse],
-    dependencies=[Depends(require_permission("kb.update"))],
+    dependencies=[Depends(require_permission("kb.update")), Depends(require_kb_access)],
 )
 async def update_knowledge_base(
     kb_update: KBUpdate,

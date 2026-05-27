@@ -11,7 +11,6 @@ from repositories.role_repo import RoleRepo
 class PermissionService:
     def list_permissions(self, db: Session, module: str | None = None) -> list:
         items = PermissionRepo(db).list_permissions()
-        # TODO：为什么不构造查询条件而是全部查出，这样性能不会降低吗，数据库压力不会很大吗
         if module is not None:
             items = [item for item in items if item.module == module]
         return items
@@ -21,7 +20,6 @@ class PermissionService:
         if not permission:
             raise ResourceNotFoundError(f"Permission '{code}' not found")
         return permission
-    # TODO：保证操作的原子性
     def create_permission(self, db: Session, req: PermissionCreate):
         permission_repo = PermissionRepo(db)
         role_repo = RoleRepo(db)
@@ -42,7 +40,6 @@ class PermissionService:
         if not permission:
             raise ResourceNotFoundError(f"Permission '{code}' not found")
         payload = req.model_dump(exclude_unset=True)
-        # TODO：这里是不是不用查数据库了，permission是不是已经查出来了
         if "parent_code" in payload and payload["parent_code"] and not permission_repo.get_permission(payload["parent_code"]):
             raise ResourceNotFoundError(f"Parent permission '{payload['parent_code']}' not found")
         merged = {
@@ -58,11 +55,10 @@ class PermissionService:
             "sort": payload.get("sort", permission.sort),
         }
         return permission_repo.upsert_permission(**merged)
-    # TODO:如果这里删除的是带有子节点的父级权限呢？
+
     def delete_permission(self, db: Session, code: str) -> None:
         if not PermissionRepo(db).delete_permission(code):
             raise ResourceNotFoundError(f"Permission '{code}' not found")
-    # TODO:没看懂这里是传了用户参数是怎么过滤权限树的
     def build_permission_tree(self, db: Session, permission_codes: set[str] | None = None) -> list[dict]:
         all_perms = PermissionRepo(db).list_permissions()
         if permission_codes is not None:

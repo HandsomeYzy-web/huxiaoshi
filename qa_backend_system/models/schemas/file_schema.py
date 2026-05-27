@@ -4,6 +4,11 @@ from pydantic import BaseModel, Field, ConfigDict, model_validator
 from typing import Optional, List
 from datetime import datetime
 
+class FileRenameRequest(BaseModel):
+    """文件重命名请求体"""
+    new_name: str = Field(..., min_length=1, max_length=255, description="新文件名（含扩展名）")
+
+
 class FileStrategyUpdate(BaseModel):
     """用户单独指定某一个文件的切分策略请求体"""
     custom_chunk_size: int = Field(..., ge=100, le=4000, description="自定义切片大小")

@@ -3,7 +3,7 @@ from typing import List
 from fastapi import APIRouter, Depends, Path
 from sqlalchemy.orm import Session
 
-from api.dependencies import require_permission
+from api.dependencies import invalidate_kb_access_cache, invalidate_user_perms_cache, require_permission
 from core.database import get_db
 from core.response import UnifiedResponse, success
 from models.entities.user import User
@@ -26,4 +26,7 @@ async def set_user_roles(
     current_user: User = Depends(require_permission("user.assign")),
 ):
     role_service.set_user_roles(db, user_id, req.role_ids, assigned_by=current_user.id)
+    # 角色变更后将权限缓存和 KB 访问权限缓存同时失效
+    invalidate_user_perms_cache(user_id)
+    invalidate_kb_access_cache(user_id)
     return success(data=None, message="User roles updated")

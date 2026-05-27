@@ -78,6 +78,11 @@ class RoleRepo:
         stmt = select(Role.name).join(UserRole, Role.id == UserRole.role_id).where(UserRole.user_id == user_id)
         return list(self.db.scalars(stmt).all())
 
+    def get_user_ids_by_role(self, role_id: int) -> list[int]:
+        """获取拥有指定角色的所有用户ID，用于批量失效权限缓存。"""
+        stmt = select(UserRole.user_id).where(UserRole.role_id == role_id)
+        return list(self.db.scalars(stmt).all())
+
     def get_role_permission_codes(self, role_id: int) -> set[str]:
         stmt = select(RolePermission.permission_code).where(RolePermission.role_id == role_id)
         return set(self.db.scalars(stmt).all())

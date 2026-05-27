@@ -1,14 +1,13 @@
-from math import ceil
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, File, Form, Path, Query, UploadFile
 from fastapi.responses import RedirectResponse
 from sqlalchemy.orm import Session
 
-from api.dependencies import get_current_user, require_permission
+from api.dependencies import get_current_user, require_kb_access, require_permission
 from core.config import settings
 from core.database import get_db
-from core.exceptions import BusinessError, ResourceNotFoundError
+from core.exceptions import BusinessError
 from core.response import UnifiedResponse, success
 from models.entities.user import User
 from models.schemas.file_schema import (
@@ -17,14 +16,12 @@ from models.schemas.file_schema import (
     ChunkPreviewResponse,
     ChunkResponse,
     FilePageResponse,
+    FileRenameRequest,
     FileResponse,
     FileStrategyUpdate,
 )
-from repositories.file_repo import FileRepo
-from repositories.kb_repo import KBRepo
-from repositories.minio_repo import minio_repo
+from models.schemas.file_schema import ChunkPreviewItem
 from services.file_service import file_service
-from services.kb_access_service import kb_access_service
 
 router = APIRouter(
     prefix="/file",
@@ -32,25 +29,24 @@ router = APIRouter(
     dependencies=[Depends(require_permission("workspace.file"))],
 )
 
+LEGACY_OFFICE_TYPES = {"doc", "xls", "ppt"}
+
 
 def _validate_upload_files(files: List[UploadFile]) -> None:
     allowed = set(settings.ALLOWED_FILE_TYPES)
     max_size = settings.MAX_UPLOAD_FILE_SIZE_BYTES
-    for file in files:
-        ext = (file.filename or "").rsplit(".", 1)[-1].lower() if file.filename else ""
+    for f in files:
+        ext = (f.filename or "").rsplit(".", 1)[-1].lower() if f.filename else ""
+        if ext in LEGACY_OFFICE_TYPES:
+            target_ext = "docx" if ext == "doc" else "xlsx" if ext == "xls" else "pptx"
+            raise BusinessError(f"暂不支持旧版 Office 文件 {f.filename}，请先转换为 .{target_ext} 后再上传")
         if ext not in allowed:
-            raise BusinessError(f"Unsupported file type: {ext}")
-        if file.size is not None and file.size > max_size:
-            raise BusinessError(f"File {file.filename} exceeds max size")
+            raise BusinessError(f"不支持的文件类型: {ext}")
+        if f.size is not None and f.size > max_size:
+            raise BusinessError(f"文件 {f.filename} 超过大小限制")
 
 
-def _ensure_user_can_access_kb(db: Session, user_id: int, kb_id: int) -> None:
-    accessible_kb_ids = kb_access_service.get_accessible_kb_ids(db, user_id)
-    if accessible_kb_ids is not None and kb_id not in accessible_kb_ids:
-        raise ResourceNotFoundError(f"Knowledge base {kb_id} not found or not accessible")
-
-
-@router.post("/upload", response_model=UnifiedResponse[List[dict]])
+@router.post("/upload", response_model=UnifiedResponse[List[dict]], dependencies=[Depends(require_permission("file.upload"))])
 async def upload_files(
     kb_id: int = Form(...),
     files: List[UploadFile] = File(...),
@@ -60,10 +56,10 @@ async def upload_files(
     current_user: User = Depends(get_current_user),
 ):
     if not files:
-        raise BusinessError("At least one file is required")
+        raise BusinessError("至少上传一个文件")
     _validate_upload_files(files)
     if custom_chunk_size is not None and custom_chunk_overlap is not None and custom_chunk_overlap >= custom_chunk_size:
-        raise BusinessError("Chunk overlap must be smaller than chunk size")
+        raise BusinessError("切片重叠度必须小于切片大小")
     return success(
         data=await file_service.batch_upload(
             db=db,
@@ -73,11 +69,11 @@ async def upload_files(
             custom_chunk_size=custom_chunk_size,
             custom_chunk_overlap=custom_chunk_overlap,
         ),
-        message="Upload processed",
+        message="上传处理完成",
     )
 
 
-@router.get("/kb/{kb_id}", response_model=UnifiedResponse[FilePageResponse])
+@router.get("/kb/{kb_id}", response_model=UnifiedResponse[FilePageResponse], dependencies=[Depends(require_kb_access)])
 async def get_kb_files(
     kb_id: int = Path(...),
     page: int = Query(1, ge=1),
@@ -85,10 +81,7 @@ async def get_kb_files(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    _ensure_user_can_access_kb(db, current_user.id, kb_id)
-    repo = FileRepo(db)
-    items, total = repo.get_files_by_kb_paginated(kb_id, page, page_size)
-    total_pages = ceil(total / page_size) if total else 0
+    items, total, total_pages = file_service.list_kb_files(db, kb_id, current_user.id, page, page_size)
     return success(
         data=FilePageResponse(
             items=[FileResponse.model_validate(item) for item in items],
@@ -97,11 +90,11 @@ async def get_kb_files(
             page_size=page_size,
             total_pages=total_pages,
         ),
-        message="Fetched files",
+        message="获取文件列表成功",
     )
 
 
-@router.delete("/{file_id}", response_model=UnifiedResponse[None])
+@router.delete("/{file_id}", response_model=UnifiedResponse[None], dependencies=[Depends(require_permission("file.delete"))])
 async def delete_file(
     file_id: int = Path(...),
     db: Session = Depends(get_db),
@@ -109,6 +102,17 @@ async def delete_file(
 ):
     file_service.delete_file(db, file_id, current_user.id)
     return success(data=None, message="File deleted")
+
+
+@router.delete("/{file_id}/chunks/{chunk_id}", response_model=UnifiedResponse[None], dependencies=[Depends(require_permission("file.delete"))])
+async def delete_chunk(
+    file_id: int = Path(...),
+    chunk_id: int = Path(...),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    file_service.delete_chunk(db, file_id, chunk_id, current_user.id)
+    return success(data=None, message="切片已删除")
 
 
 @router.get("/{file_id}/chunks", response_model=UnifiedResponse[ChunkPageResponse])
@@ -119,13 +123,7 @@ async def get_file_chunks(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    repo = FileRepo(db)
-    file_entity = repo.get_file_by_id(file_id)
-    if not file_entity:
-        raise ResourceNotFoundError("File not found")
-    _ensure_user_can_access_kb(db, current_user.id, file_entity.kb_id)
-    chunks, total = repo.get_chunks_by_file_id_paginated(file_id, page, page_size)
-    total_pages = ceil(total / page_size) if total else 0
+    chunks, total, total_pages = file_service.get_file_chunks(db, file_id, current_user.id, page, page_size)
     return success(
         data=ChunkPageResponse(
             items=[ChunkResponse.model_validate(chunk) for chunk in chunks],
@@ -134,38 +132,19 @@ async def get_file_chunks(
             page_size=page_size,
             total_pages=total_pages,
         ),
-        message="Fetched file chunks",
+        message="获取分段列表成功",
     )
 
 
-@router.put("/{file_id}/strategy", response_model=UnifiedResponse[FileResponse])
+@router.put("/{file_id}/strategy", response_model=UnifiedResponse[FileResponse], dependencies=[Depends(require_permission("file.reprocess"))])
 async def update_file_strategy(
     strategy_in: FileStrategyUpdate,
     file_id: int = Path(...),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    repo = FileRepo(db)
-    file_entity = repo.get_file_by_id(file_id)
-    if not file_entity:
-        raise ResourceNotFoundError("File not found")
-    _ensure_user_can_access_kb(db, current_user.id, file_entity.kb_id)
-
-    file_entity.custom_chunk_size = strategy_in.custom_chunk_size
-    file_entity.custom_chunk_overlap = strategy_in.custom_chunk_overlap
-    if strategy_in.custom_separators is not None:
-        import json
-
-        file_entity.custom_separators = json.dumps(strategy_in.custom_separators, ensure_ascii=False)
-    file_entity.status = 0
-    file_entity.error_msg = None
-    db.commit()
-    db.refresh(file_entity)
-
-    from tasks.document_tasks import reprocess_document_task
-
-    reprocess_document_task.delay(file_id)
-    return success(data=file_entity, message="File strategy updated")
+    file_entity = file_service.update_file_strategy(db, file_id, strategy_in, current_user.id)
+    return success(data=FileResponse.model_validate(file_entity), message="切分策略已更新，重新解析任务已触发")
 
 
 @router.get("/image/{kb_id}/{image_name}")
@@ -175,9 +154,8 @@ async def get_image(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    _ensure_user_can_access_kb(db, current_user.id, kb_id)
-    object_name = f"kb_{kb_id}/images/{image_name}"
-    return RedirectResponse(url=minio_repo.get_presigned_url(object_name, expires_hours=2))
+    url = file_service.get_image_url(db, kb_id, image_name, current_user.id)
+    return RedirectResponse(url=url)
 
 
 @router.post("/preview-chunks", response_model=UnifiedResponse[ChunkPreviewResponse])
@@ -186,35 +164,11 @@ async def preview_file_chunks(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    from langchain_core.documents import Document
-    from langchain_text_splitters import RecursiveCharacterTextSplitter
-    from models.schemas.file_schema import ChunkPreviewItem
-    from services.rag_service import rag_service
-
-    repo = FileRepo(db)
-    file_entity = repo.get_file_by_id(request.file_id)
-    if not file_entity:
-        raise ResourceNotFoundError("File not found")
-    _ensure_user_can_access_kb(db, current_user.id, file_entity.kb_id)
-
-    kb_entity = KBRepo(db).get_kb_by_id(file_entity.kb_id)
-    if not kb_entity:
-        raise ResourceNotFoundError("Knowledge base not found")
-
-    full_text = rag_service._extract_text(file_entity, kb_entity)
-    if not full_text or not full_text.strip():
-        raise BusinessError("No text extracted from file")
-
-    separators = request.separators or ["\n\n", "\n", "。", "，", " ", ""]
-    splitter = RecursiveCharacterTextSplitter(
-        chunk_size=request.chunk_size,
-        chunk_overlap=request.chunk_overlap,
-        separators=separators,
-    )
-    chunks = splitter.split_documents([Document(page_content=full_text)])
+    """预览文件切分结果（供调试使用）。"""
+    chunks = file_service.preview_chunks(db, request, current_user.id)
     preview_items = [
-        ChunkPreviewItem(index=index, content=chunk.page_content, char_count=len(chunk.page_content))
-        for index, chunk in enumerate(chunks)
+        ChunkPreviewItem(index=i, content=c.page_content, char_count=len(c.page_content))
+        for i, c in enumerate(chunks)
     ]
     return success(
         data=ChunkPreviewResponse(
@@ -222,5 +176,5 @@ async def preview_file_chunks(
             chunks=preview_items,
             total_chars=sum(item.char_count for item in preview_items),
         ),
-        message="Preview generated",
+        message="预览生成成功",
     )

@@ -32,10 +32,33 @@ class RedisRepo:
             return json.loads(data)
         return None
 
+    def set_list(self, key: str, values: list, expire_seconds: int = 300):
+        """缓存字符串列表，如权限代码集合。"""
+        if self.client is None:
+            return
+        self.client.setex(key, expire_seconds, json.dumps(values, ensure_ascii=False))
+
+    def get_list(self, key: str) -> list | None:
+        """读取字符串列表缓存，未命中返回 None。"""
+        if self.client is None:
+            return None
+        data = self.client.get(key)
+        if data:
+            return json.loads(data)
+        return None
+
     def delete(self, key: str):
         if self.client is None:
             return
         self.client.delete(key)
+
+    def delete_pattern(self, pattern: str):
+        """删除匹配 glob 模式的所有 key（慎用，仅用于小规模失效场景）。"""
+        if self.client is None:
+            return
+        keys = self.client.keys(pattern)
+        if keys:
+            self.client.delete(*keys)
 
     def ping(self) -> bool:
         if self.client is None:

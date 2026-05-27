@@ -78,7 +78,6 @@ class RoleService:
         if not default_role:
             raise ResourceNotFoundError("Default user role is missing")
         repo.assign_role(user_id, default_role.id)
-    # TODO：检查这里有没有返回permissions的必要
     def list_roles(self, db: Session) -> list[dict]:
         repo = RoleRepo(db)
         result = []
@@ -96,7 +95,6 @@ class RoleService:
                 }
             )
         return result
-    # TODO:同上
     def create_role(self, db: Session, req: RoleCreate) -> dict:
         repo = RoleRepo(db)
         if repo.get_role_by_code(req.code):
@@ -123,7 +121,6 @@ class RoleService:
             "permissions": [],
         }
 
-    # TODO:同上
     def update_role(self, db: Session, role_id: int, req: RoleUpdate) -> dict:
         repo = RoleRepo(db)
         role = repo.get_role_by_id(role_id)
@@ -151,7 +148,6 @@ class RoleService:
             "created_at": updated.created_at,
             "permissions": sorted(repo.get_role_permission_codes(updated.id)),
         }
-    # #TODO: 检查删除role时，role_permission和user_role是否也被删除，同时保证原子性
     def delete_role(self, db: Session, role_id: int) -> None:
         repo = RoleRepo(db)
         role = repo.get_role_by_id(role_id)
@@ -171,9 +167,7 @@ class RoleService:
         if invalid:
             raise ResourceNotFoundError(f"Invalid permissions: {invalid}")
         role_repo.set_role_permissions(role_id, permission_codes)
-    # TODO:新建user——service并移入
     def list_users(self, db: Session) -> list[dict]:
-        # TODO:这一行代码越权了，应该封装在user_repo中
         users = list(db.scalars(select(User).order_by(User.id)).all())
         repo = RoleRepo(db)
         result = []
@@ -189,7 +183,6 @@ class RoleService:
                         "role_type": role.role_type,
                         "status": role.status,
                         "created_at": role.created_at,
-                        # TODO：检查这里有没有返回permissions的必要
                         "permissions": sorted(repo.get_role_permission_codes(role.id)),
                     }
                 )
@@ -204,7 +197,6 @@ class RoleService:
                 }
             )
         return result
-    # TODO:同上
     def set_user_roles(self, db: Session, user_id: int, role_ids: list[int], assigned_by: int | None = None) -> None:
         user_repo = UserRepo(db)
         repo = RoleRepo(db)
@@ -218,14 +210,12 @@ class RoleService:
                 raise PermissionDeniedError(f"Role {role.name} is disabled")
         repo.set_user_roles(user_id, role_ids, assigned_by=assigned_by)
 
-    # TODO:同上
     def get_user_permissions(self, db: Session, user_id: int) -> set[str]:
         user = UserRepo(db).get_by_id(user_id)
         if not user:
             return set()
         return RoleRepo(db).get_user_permission_codes(user_id)
 
-    # TODO:同上
     def get_user_role_names(self, db: Session, user_id: int) -> list[str]:
         return RoleRepo(db).get_user_role_names(user_id)
 

@@ -56,6 +56,11 @@ export const ROUTE_PATHS = {
   qaTest: '/workspace/qa-test',
   chat: '/chat',
   admin: '/admin',
+  adminRoles: '/admin/roles',
+  adminUsers: '/admin/users',
+  adminPermissions: '/admin/permissions',
+  adminKbAccess: '/admin/kb-access',
+  adminModels: '/admin/models',
   forbidden: '/403',
 } as const
 

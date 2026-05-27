@@ -19,7 +19,6 @@ def process_document_task(self, file_id: int):
         file_entity = repo.get_file_by_id(file_id)
         if not file_entity:
             logger.error(f"File not found, abort task: file_id={file_id}")
-            repo.update_file_status(file_id, status=3, error_msg="文件记录不存在")
             return
 
         kb_entity = kb_repo.get_kb_by_id(file_entity.kb_id)
@@ -28,8 +27,19 @@ def process_document_task(self, file_id: int):
             repo.update_file_status(file_id, status=3, error_msg="关联的知识库不存在或已被删除")
             return
 
+        kb_id = file_entity.kb_id
         repo.update_file_status(file_id, status=1)
         rag_service.process_and_embed_file(db, file_entity, kb_entity)
+
+        # 竞态校验：处理完成后再次确认文件仍存在
+        # 若用户在任务执行期间删除了该文件，需清理刚写入 Milvus 的向量
+        if not repo.get_file_by_id(file_id):
+            logger.warning(
+                f"File was deleted during processing, cleaning up Milvus: file_id={file_id}"
+            )
+            milvus_repo.delete_chunks_by_file_id(kb_id, file_id)
+            return
+
         repo.update_file_status(file_id, status=2)
         logger.info(f"Document process task completed: file_id={file_id}")
     except Exception as exc:
@@ -56,12 +66,23 @@ def reprocess_document_task(self, file_id: int):
             repo.update_file_status(file_id, status=3, error_msg="关联的知识库不存在或已被删除")
             return
 
+        kb_id = file_entity.kb_id
         repo.update_file_status(file_id, status=1)
 
         repo.delete_chunks_by_file_id(file_id)
-        milvus_repo.delete_chunks_by_file_id(file_entity.kb_id, file_id)
+        milvus_repo.delete_chunks_by_file_id(kb_id, file_id)
 
         rag_service.process_and_embed_file(db, file_entity, kb_entity)
+
+        # 竞态校验：处理完成后再次确认文件仍存在
+        # 若用户在任务执行期间删除了该文件，需清理刚写入 Milvus 的向量
+        if not repo.get_file_by_id(file_id):
+            logger.warning(
+                f"File was deleted during reprocessing, cleaning up Milvus: file_id={file_id}"
+            )
+            milvus_repo.delete_chunks_by_file_id(kb_id, file_id)
+            return
+
         repo.update_file_status(file_id, status=2)
         logger.info(f"Document reprocess task completed: file_id={file_id}")
     except Exception as exc:

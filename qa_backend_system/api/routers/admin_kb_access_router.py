@@ -3,7 +3,7 @@ from typing import List
 from fastapi import APIRouter, Depends, Path
 from sqlalchemy.orm import Session
 
-from api.dependencies import require_permission
+from api.dependencies import invalidate_all_kb_access_cache, require_permission
 from core.database import get_db
 from core.response import UnifiedResponse, success
 from models.entities.user import User
@@ -21,6 +21,7 @@ async def set_kb_access(
     _user: User = Depends(require_permission("kb_access.assign")),
 ):
     kb_access_service.set_kb_access(db, kb_id, req.role_ids)
+    invalidate_all_kb_access_cache()
     return success(data=None, message="KB access updated")
 
 

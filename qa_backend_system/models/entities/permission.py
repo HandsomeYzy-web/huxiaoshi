@@ -19,7 +19,10 @@ class Permission(Base):
     module: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
     icon: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
     path: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
-    type: Mapped[str] = mapped_column(String(16), nullable=False, default="feature", index=True)
+    type: Mapped[str] = mapped_column(
+        String(16), nullable=False, default="feature", index=True,
+        comment="展示分类字段（feature=功能权限 / admin=管理权限），仅用于前端渲染，不参与后端权限校验逻辑"
+    )
     status: Mapped[str] = mapped_column(String(16), nullable=False, default="active", index=True)
     sort: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), nullable=False)

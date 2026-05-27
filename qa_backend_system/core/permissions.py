@@ -10,6 +10,8 @@ class PermDef:
     parent_code: str | None = None
     icon: str | None = None
     path: str | None = None
+    # type 仅为展示/分类字段（'feature' | 'admin'），供前端渲染用。
+    # 后端权限校验只依赖 permission_code，与 type 无关。
     type: str = "feature"
     status: str = "active"
     sort: int = 0

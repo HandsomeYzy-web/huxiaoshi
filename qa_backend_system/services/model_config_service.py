@@ -55,7 +55,6 @@ class ModelConfigService:
         if not config:
             raise ResourceNotFoundError(f"模型配置 ID={config_id} 不存在")
         return _to_response(config)
-    # TODO:这里如果创建了设置为激活的embedding模型怎么办，同时如果激活了新的，关闭了旧的模型配置也没有清除模型的缓存
     def create_config(self, db: Session, req: ModelConfigCreate) -> ModelConfigResponse:
         if req.model_type not in SUPPORTED_MODEL_TYPES:
             raise BusinessError(f"不支持的模型类型: {req.model_type}，支持: {SUPPORTED_MODEL_TYPES}")
@@ -68,20 +67,13 @@ class ModelConfigService:
             model_name=req.model_name,
             api_base_url=req.api_base_url,
             api_key=req.api_key,
-            is_active=req.is_active,
+            is_active=False,
             extra_params=req.extra_params,
         )
-
-        # 如果设为激活且已有同类型激活模型，先关闭旧的
-        if req.is_active:
-            existing_active = repo.get_active(req.model_type)
-            if existing_active:
-                existing_active.is_active = False
 
         created = repo.create(config)
         logger.info(f"Created model config: {created.name} ({created.model_type})")
         return _to_response(created)
-    # TODO:这里的问题同上，如果激活的是embedding模型，应该提示用户重建知识库，并提供一键重建的功能
     def update_config(self, db: Session, config_id: int, req: ModelConfigUpdate) -> ModelConfigResponse:
         repo = ModelConfigRepo(db)
         config = repo.get_by_id(config_id)
@@ -89,17 +81,8 @@ class ModelConfigService:
             raise ResourceNotFoundError(f"模型配置 ID={config_id} 不存在")
 
         update_data = req.model_dump(exclude_unset=True)
-
-        # 如果要激活，先关闭同类型的
-        if update_data.get("is_active") is True:
-            existing_active = repo.get_active(config.model_type)
-            if existing_active and existing_active.id != config_id:
-                existing_active.is_active = False
-                db.flush()
-
         updated = repo.update(config_id, update_data)
 
-        # 任何字段变更都应清缓存，否则运行中的服务继续使用旧配置
         if config.is_active:
             self._invalidate_service_cache(config.model_type)
 
