@@ -28,6 +28,9 @@ class QAAskResponse(BaseModel):
     citations: List[CitationItem]
     retrieved_count: int
     model_used: Optional[str] = None
+    generated_sql: Optional[str] = None
+    sql_result_json: Optional[str] = None
+    db_error: Optional[str] = None
 
 
 class ChatAskRequest(BaseModel):
@@ -42,3 +45,6 @@ class ChatAskResponse(BaseModel):
     queried_kb_count: int
     queried_kb_ids: List[int]
     model_used: Optional[str] = None
+    generated_sql: Optional[str] = None
+    sql_result_json: Optional[str] = None
+    db_error: Optional[str] = None

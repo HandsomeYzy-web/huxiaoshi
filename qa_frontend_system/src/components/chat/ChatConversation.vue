@@ -2,9 +2,31 @@
   <div class="message-container">
     <div v-if="!messages.length && !streamingContent && !streaming" class="empty-state">
       <div class="empty-content">
-        <div class="empty-icon">QA</div>
-        <h3>开始一个新的问题</h3>
-        <p>这里会基于知识库内容、检索结果和数据查询能力给出回答。</p>
+        <div class="empty-emblem">
+          <span class="emblem-char">识</span>
+        </div>
+        <h3>你好，我是湖小识</h3>
+        <p>基于学院知识库的内容、检索结果与数据查询能力，为你提供可靠的解答。</p>
+
+        <div class="capability-cards">
+          <div class="capability-card">
+            <el-icon class="capability-icon"><Reading /></el-icon>
+            <div class="capability-name">知识库问答</div>
+            <div class="capability-desc">理解你的提问，结合馆藏资料作答</div>
+          </div>
+          <div class="capability-card">
+            <el-icon class="capability-icon"><Document /></el-icon>
+            <div class="capability-name">文档检索溯源</div>
+            <div class="capability-desc">标注引用来源，回答有据可查</div>
+          </div>
+          <div class="capability-card">
+            <el-icon class="capability-icon"><DataAnalysis /></el-icon>
+            <div class="capability-name">数据智能查询</div>
+            <div class="capability-desc">用自然语言查询结构化数据</div>
+          </div>
+        </div>
+
+        <p class="empty-hint">在下方输入框中提出你的第一个问题吧</p>
       </div>
     </div>
 
@@ -20,7 +42,7 @@
       >
         <template #avatar>
           <div :class="['avatar', message.role === 'user' ? 'user-avatar' : 'assistant-avatar']">
-            {{ message.role === 'user' ? '我' : 'QA' }}
+            {{ message.role === 'user' ? '我' : '识' }}
           </div>
         </template>
 
@@ -28,7 +50,7 @@
           <div class="message-header">
             <template v-if="message.role === 'assistant'">
               <span class="sender-name">湖小识</span>
-              <el-tag v-if="message.model_used" size="small" type="info" effect="plain">
+              <el-tag v-if="message.model_used" size="small" class="model-tag" effect="plain">
                 {{ message.model_used }}
               </el-tag>
             </template>
@@ -38,7 +60,10 @@
 
         <template v-if="message.role === 'assistant'" #footer>
           <div v-if="parseSqlResult(message.sql_result_json)" class="message-sql-block">
-            <div class="sql-title">查询结果</div>
+            <div class="sql-title">
+              <el-icon><DataAnalysis /></el-icon>
+              查询结果
+            </div>
             <div class="sql-result-table">
               <el-table :data="parseSqlResult(message.sql_result_json)!.rows" size="small" max-height="260" stripe border>
                 <el-table-column
@@ -61,7 +86,7 @@
               <el-tag
                 v-for="doc in getMessageDocuments(message)"
                 :key="`${message.id}-${doc.kb_id}-${doc.file_id}`"
-                type="success"
+                class="doc-tag"
                 effect="light"
                 size="small"
               >
@@ -89,19 +114,22 @@
         class="message-bubble assistant streaming"
       >
         <template #avatar>
-          <div class="avatar assistant-avatar">QA</div>
+          <div class="avatar assistant-avatar">识</div>
         </template>
         <template #header>
           <div class="message-header">
             <span class="sender-name">湖小识</span>
-            <el-tag v-if="streamingStatus" size="small" type="primary" effect="plain" class="status-tag">
+            <el-tag v-if="streamingStatus" size="small" class="status-tag" effect="plain">
               <span class="status-dot" /> {{ streamingStatus }}
             </el-tag>
           </div>
         </template>
         <template v-if="streamingSqlResult" #footer>
           <div class="message-sql-block">
-            <div class="sql-title">查询结果</div>
+            <div class="sql-title">
+              <el-icon><DataAnalysis /></el-icon>
+              查询结果
+            </div>
             <div class="sql-result-table">
               <el-table :data="streamingSqlResult.rows" size="small" max-height="260" stripe border>
                 <el-table-column
@@ -123,7 +151,7 @@
 
 <script setup lang="ts">
 import { nextTick, ref } from 'vue'
-import { Document } from '@element-plus/icons-vue'
+import { DataAnalysis, Document, Reading } from '@element-plus/icons-vue'
 
 import type { ChatDocumentItem, ChatMessage, SqlResultData } from '../../api/chat'
 
@@ -210,121 +238,204 @@ defineExpose({
 .message-container {
   flex: 1;
   overflow-y: auto;
-  padding: 20px;
+  padding: 26px 20px 12px;
 }
 
+/* ---------- 空状态 ---------- */
 .empty-state {
   display: flex;
   align-items: center;
   justify-content: center;
-  height: 100%;
+  min-height: 100%;
 }
 
 .empty-content {
+  max-width: 720px;
   text-align: center;
-  color: #606266;
+  color: #6d5d52;
 }
 
-.empty-icon {
-  width: 72px;
-  height: 72px;
-  margin: 0 auto 16px;
-  border-radius: 18px;
+.empty-emblem {
+  width: 84px;
+  height: 84px;
+  margin: 0 auto 20px;
+  border-radius: 26px;
   display: grid;
   place-items: center;
-  font-size: 28px;
-  font-weight: 800;
-  color: #fff;
-  background: linear-gradient(135deg, #409eff 0%, #1677ff 100%);
+  background: linear-gradient(150deg, #9f2f2f 0%, #7a1c20 100%);
+  box-shadow: 0 16px 32px rgba(122, 28, 32, 0.28);
+  position: relative;
+}
+
+.empty-emblem::after {
+  content: '';
+  position: absolute;
+  inset: 5px;
+  border-radius: 21px;
+  border: 1px solid rgba(251, 233, 210, 0.4);
+}
+
+.emblem-char {
+  font-family: 'Noto Serif SC', 'STSong', 'Songti SC', serif;
+  font-size: 40px;
+  font-weight: 700;
+  color: #fbe9d2;
 }
 
 .empty-content h3 {
-  font-size: 24px;
-  font-weight: 500;
-  color: #303133;
-  margin: 0 0 8px;
+  font-family: 'Noto Serif SC', 'STSong', 'Songti SC', serif;
+  font-size: 26px;
+  font-weight: 700;
+  color: #4e2f26;
+  margin: 0 0 10px;
 }
 
 .empty-content p {
   font-size: 14px;
-  color: #909399;
-  margin: 0;
+  line-height: 1.7;
+  color: #8c6d59;
+  margin: 0 auto;
+  max-width: 460px;
 }
 
+.capability-cards {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 14px;
+  margin: 28px 0 20px;
+}
+
+.capability-card {
+  padding: 18px 16px;
+  border: 1px solid #ecd9c2;
+  border-radius: 16px;
+  background:
+    linear-gradient(180deg, rgba(255, 253, 248, 0.95) 0%, rgba(252, 245, 236, 0.95) 100%);
+  text-align: center;
+  transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+}
+
+.capability-card:hover {
+  transform: translateY(-3px);
+  border-color: #e0bd95;
+  box-shadow: 0 12px 24px rgba(122, 28, 32, 0.1);
+}
+
+.capability-icon {
+  font-size: 24px;
+  color: #9f2f2f;
+  margin-bottom: 10px;
+}
+
+.capability-name {
+  font-size: 15px;
+  font-weight: 600;
+  color: #4e2f26;
+  margin-bottom: 6px;
+}
+
+.capability-desc {
+  font-size: 12px;
+  line-height: 1.6;
+  color: #9a8470;
+}
+
+.empty-hint {
+  font-size: 13px;
+  color: #b09a86 !important;
+}
+
+/* ---------- 消息列表 ---------- */
 .message-list {
-  max-width: 900px;
+  max-width: 880px;
   margin: 0 auto;
 }
 
 .message-bubble {
-  margin-bottom: 16px;
+  margin-bottom: 20px;
 }
 
 .message-bubble.user :deep(.el-a-bubble-content) {
-  background: linear-gradient(135deg, #409eff 0%, #1677ff 100%);
-  color: #fff;
-  border-radius: 12px 12px 4px 12px;
+  background: linear-gradient(135deg, #9f2f2f 0%, #7a1c20 100%);
+  color: #fdf3e8;
+  border-radius: 16px 16px 4px 16px;
+  box-shadow: 0 8px 18px rgba(122, 28, 32, 0.22);
 }
 
 .message-bubble.user :deep(.el-a-bubble-content-text) {
-  color: #fff;
+  color: #fdf3e8;
 }
 
 .message-bubble.assistant :deep(.el-a-bubble-content) {
-  background: #fff;
-  border: 1px solid #e4e7ed;
-  border-radius: 12px 12px 12px 4px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+  background:
+    linear-gradient(180deg, rgba(255, 253, 249, 0.98) 0%, rgba(253, 248, 240, 0.98) 100%);
+  border: 1px solid #ecdfce;
+  border-radius: 16px 16px 16px 4px;
+  box-shadow: 0 6px 18px rgba(83, 38, 18, 0.07);
+  color: #3c2f26;
 }
 
 .message-bubble.streaming :deep(.el-a-bubble-content) {
-  border-color: #409eff;
-  box-shadow: 0 0 0 2px rgba(64, 158, 255, 0.1);
+  border-color: #e0bd95;
+  box-shadow: 0 0 0 3px rgba(201, 138, 58, 0.14), 0 6px 18px rgba(83, 38, 18, 0.08);
 }
 
 .avatar {
   width: 40px;
   height: 40px;
-  border-radius: 50%;
+  border-radius: 13px;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 14px;
-  font-weight: 600;
+  font-family: 'Noto Serif SC', 'STSong', 'Songti SC', serif;
+  font-size: 18px;
+  font-weight: 700;
 }
 
 .user-avatar {
-  background: linear-gradient(135deg, #409eff 0%, #1677ff 100%);
-  color: #fff;
+  background: linear-gradient(135deg, #c98a3a 0%, #a9702a 100%);
+  color: #fff7ea;
+  box-shadow: 0 6px 14px rgba(169, 112, 42, 0.28);
 }
 
 .assistant-avatar {
-  background: linear-gradient(135deg, #67c23a 0%, #4caf50 100%);
-  color: #fff;
+  background: linear-gradient(150deg, #9f2f2f 0%, #7a1c20 100%);
+  color: #fbe9d2;
+  box-shadow: 0 6px 14px rgba(122, 28, 32, 0.28);
 }
 
 .message-header {
   display: flex;
   align-items: center;
   gap: 8px;
-  margin-bottom: 4px;
+  margin-bottom: 5px;
   font-size: 12px;
 }
 
 .sender-name {
-  font-weight: 600;
-  color: #606266;
+  font-family: 'Noto Serif SC', 'STSong', 'Songti SC', serif;
+  font-weight: 700;
+  font-size: 13px;
+  color: #7a1c20;
 }
 
 .message-time {
-  color: #909399;
+  color: #a3917f;
 }
 
+.model-tag {
+  --el-tag-bg-color: rgba(201, 138, 58, 0.1);
+  --el-tag-border-color: rgba(201, 138, 58, 0.3);
+  --el-tag-text-color: #a9702a;
+}
+
+/* ---------- 关联文档 ---------- */
 .message-documents {
-  margin-top: 12px;
-  padding: 12px;
-  background: #f5f7fa;
-  border-radius: 8px;
+  margin-top: 14px;
+  padding: 14px;
+  background: rgba(250, 242, 232, 0.7);
+  border: 1px solid #ecdfce;
+  border-radius: 12px;
 }
 
 .documents-title {
@@ -332,8 +443,9 @@ defineExpose({
   align-items: center;
   gap: 6px;
   font-size: 12px;
-  color: #606266;
-  margin-bottom: 8px;
+  font-weight: 600;
+  color: #7a5c47;
+  margin-bottom: 10px;
 }
 
 .documents-list {
@@ -342,38 +454,35 @@ defineExpose({
   gap: 6px;
 }
 
-.retrieved-info {
-  margin-top: 8px;
-  font-size: 11px;
-  color: #67c23a;
+.doc-tag {
+  --el-tag-bg-color: rgba(159, 47, 47, 0.06);
+  --el-tag-border-color: rgba(159, 47, 47, 0.2);
+  --el-tag-text-color: #8a3a2f;
 }
 
+.retrieved-info {
+  margin-top: 10px;
+  font-size: 11px;
+  color: #a9702a;
+}
+
+/* ---------- SQL 结果 ---------- */
 .message-sql-block {
-  margin-top: 12px;
-  padding: 12px;
-  background: #fafafa;
-  border-radius: 8px;
-  border: 1px solid #ebeef5;
+  margin-top: 14px;
+  padding: 14px;
+  background: rgba(252, 246, 238, 0.8);
+  border-radius: 12px;
+  border: 1px solid #ecdfce;
 }
 
 .sql-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
   font-size: 12px;
   font-weight: 600;
-  color: #606266;
-  margin-bottom: 8px;
-}
-
-.sql-code {
-  background: #1e1e1e;
-  color: #d4d4d4;
-  padding: 12px;
-  border-radius: 6px;
-  font-size: 12px;
-  font-family: 'Consolas', 'Monaco', monospace;
-  overflow-x: auto;
-  white-space: pre-wrap;
-  word-break: break-all;
-  margin: 0 0 8px;
+  color: #7a5c47;
+  margin-bottom: 10px;
 }
 
 .sql-result-table {
@@ -382,9 +491,18 @@ defineExpose({
 
 .sql-result-table :deep(.el-table) {
   font-size: 12px;
+  --el-table-border-color: #ecdfce;
+  --el-table-header-bg-color: #f7eddf;
+  --el-table-header-text-color: #6d5340;
+  --el-table-row-hover-bg-color: #fbf2e6;
+  border-radius: 8px;
 }
 
+/* ---------- 状态提示 ---------- */
 .status-tag {
+  --el-tag-bg-color: rgba(159, 47, 47, 0.08);
+  --el-tag-border-color: rgba(159, 47, 47, 0.24);
+  --el-tag-text-color: #9f2f2f;
   animation: pulse 1.5s ease-in-out infinite;
 }
 
@@ -393,7 +511,7 @@ defineExpose({
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  background: #409eff;
+  background: #9f2f2f;
   margin-right: 4px;
   animation: blink 1s ease-in-out infinite;
 }
@@ -406,5 +524,11 @@ defineExpose({
 @keyframes blink {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.3; }
+}
+
+@media (max-width: 768px) {
+  .capability-cards {
+    grid-template-columns: 1fr;
+  }
 }
 </style>

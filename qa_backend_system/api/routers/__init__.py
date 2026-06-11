@@ -1,3 +1,3 @@
-from . import admin_router, auth_router, chat_router, file_router, kb_router, qa_router
+from . import chat_router, file_router, kb_router, model_router, qa_router, text2sql_router
 
-__all__ = ["admin_router", "auth_router", "chat_router", "file_router", "kb_router", "qa_router"]
+__all__ = ["chat_router", "file_router", "kb_router", "model_router", "qa_router", "text2sql_router"]

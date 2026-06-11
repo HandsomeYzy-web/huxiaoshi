@@ -1,0 +1,39 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-labelledby="title desc">
+  <title id="title">湖南师范大学校徽</title>
+  <desc id="desc">湖南师范大学校徽样式图形</desc>
+  <defs>
+    <radialGradient id="bg" cx="30%" cy="25%" r="80%">
+      <stop offset="0" stop-color="#c95757" />
+      <stop offset="0.6" stop-color="#a92f36" />
+      <stop offset="1" stop-color="#7f1b24" />
+    </radialGradient>
+    <linearGradient id="inner" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#fffaf6" />
+      <stop offset="1" stop-color="#f3e2d3" />
+    </linearGradient>
+    <path id="circlePath" d="M 128 128 m -94 0 a 94 94 0 1 1 188 0 a 94 94 0 1 1 -188 0" />
+  </defs>
+
+  <circle cx="128" cy="128" r="122" fill="url(#bg)" />
+  <circle cx="128" cy="128" r="104" fill="none" stroke="#f2d8bf" stroke-width="3" opacity="0.85" />
+  <circle cx="128" cy="128" r="82" fill="url(#inner)" stroke="#d5b190" stroke-width="3" />
+
+  <text fill="#f8e8d8" font-size="17" font-family="'Noto Serif SC', 'SimSun', serif" letter-spacing="1.5">
+    <textPath href="#circlePath" startOffset="51%" text-anchor="middle">湖南师范大学 • HUNAN NORMAL UNIVERSITY •</textPath>
+  </text>
+
+  <g fill="#8e2730">
+    <path d="M72 152c13-9 30-15 56-15s43 6 56 15l-5 13c-15-8-30-12-51-12s-36 4-51 12z"/>
+    <path d="M90 124c8-20 23-34 38-34s30 14 38 34h-17c-5-10-12-17-21-17s-16 7-21 17z"/>
+    <path d="M82 168h92v8H82z"/>
+    <circle cx="128" cy="78" r="10"/>
+  </g>
+
+  <g fill="#b2464f">
+    <circle cx="128" cy="128" r="60" fill="none" stroke="#b2464f" stroke-opacity="0.35" stroke-width="2" stroke-dasharray="4 6" />
+  </g>
+
+  <g fill="#7f1b24" font-family="'Noto Serif SC', 'SimSun', serif">
+    <text x="128" y="198" text-anchor="middle" font-size="17">1938</text>
+  </g>
+</svg>

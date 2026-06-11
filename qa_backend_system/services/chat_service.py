@@ -1,21 +1,25 @@
 """
-Chat Service — 三路由流式聊天管道。
+Chat Service — 多链路流式聊天管道。
 
-恢复按意图分流：
+按用户选择的模式（或自动意图分类）分流：
 - casual_chat: 闲聊
-- data_query: Text2SQL
-- doc_search: 知识库检索
+- doc_search: 知识库检索（mode=docs 或 auto 判定）
+- data_query: 数据查询，走 text2SQL 链路（mode=data 或 auto 判定）
+- file_analysis: 上传表格分析（mode=file，短期存储、分析后删除）
 
 同时保持当前实现不再跨线程共享 SQLAlchemy Session。
 """
 
 import json
 from collections.abc import Generator
+from queue import Queue
+from threading import Thread
 
 from sqlalchemy.orm import Session
 
 from core.config import settings
-from core.exceptions import ResourceNotFoundError
+from core.database import SessionLocal
+from core.exceptions import BusinessError, ResourceNotFoundError
 from core.logger import logger
 from models.entities import ChatMessage, ChatSession
 from models.schemas.chat_schema import (
@@ -37,6 +41,9 @@ from services.intent_service import (
     intent_service,
 )
 from services.qa_service import qa_service
+
+# 上传表格分析的伪意图（不参与自动分类，仅 mode=file 触发）
+INTENT_FILE_ANALYSIS = "file_analysis"
 
 DEFAULT_SESSION_TITLE = ChatSessionCreateRequest.model_fields["title"].default
 
@@ -96,11 +103,17 @@ class ChatService:
         all_messages = repo.list_chat_messages(session.id)
         recent_history = self._extract_history_pairs(all_messages)
 
-        intent, _, _ = self._classify_intent(question)
+        intent, _, _ = self._resolve_intent(question, request.mode)
         if intent == INTENT_CASUAL_CHAT:
             answer, model_used, citations_data, generated_sql, sql_result_json = self._handle_casual_chat(question)
+        elif intent == INTENT_FILE_ANALYSIS:
+            answer, model_used, citations_data, generated_sql, sql_result_json = self._handle_file_analysis(
+                question, request.upload_id, user_id
+            )
         elif intent == INTENT_DATA_QUERY:
-            answer, model_used, citations_data, generated_sql, sql_result_json = self._handle_data_query(question)
+            answer, model_used, citations_data, generated_sql, sql_result_json = self._handle_data_query(
+                db, question, user_id, data_history=self._extract_data_history(all_messages)
+            )
         else:
             answer, model_used, citations_data, generated_sql, sql_result_json = self._handle_doc_search(
                 db, question, user_id, history=recent_history
@@ -168,8 +181,9 @@ class ChatService:
         all_messages = repo.list_chat_messages(session.id)
         recent_history = self._extract_history_pairs(all_messages)
 
-        yield _sse("status", {"step": "intent_classifying", "message": "正在分析问题意图..."})
-        intent, confidence, reason = self._classify_intent(question)
+        if request.mode == "auto":
+            yield _sse("status", {"step": "intent_classifying", "message": "正在分析问题意图..."})
+        intent, confidence, reason = self._resolve_intent(question, request.mode)
         yield _sse("intent", {"intent": intent, "confidence": confidence, "reason": reason})
         ctx: dict = {
             "full_answer": "",
@@ -183,8 +197,13 @@ class ChatService:
             if intent == INTENT_CASUAL_CHAT:
                 for sse_frame in self._stream_casual_chat(question, ctx):
                     yield sse_frame
+            elif intent == INTENT_FILE_ANALYSIS:
+                for sse_frame in self._stream_file_analysis(question, request.upload_id, user_id, ctx):
+                    yield sse_frame
             elif intent == INTENT_DATA_QUERY:
-                for sse_frame in self._stream_data_query(question, ctx):
+                for sse_frame in self._stream_data_query(
+                    question, user_id, ctx, data_history=self._extract_data_history(all_messages)
+                ):
                     yield sse_frame
             else:
                 for sse_frame in self._stream_doc_search(db, question, user_id, ctx, history=recent_history):
@@ -220,6 +239,22 @@ class ChatService:
             yield _sse("error", {"message": str(exc)})
             raise
 
+    def _resolve_intent(self, question: str, mode: str) -> tuple[str, float, str]:
+        """按用户选择的模式确定链路；mode=auto 时走 LLM 意图分类。"""
+        if mode == "docs":
+            return INTENT_DOC_SEARCH, 1.0, "用户指定查文档"
+        if mode == "data":
+            if not settings.TEXT2SQL_ENABLED:
+                return INTENT_DOC_SEARCH, 1.0, "Text2SQL 未启用，回退为文档检索"
+            return INTENT_DATA_QUERY, 1.0, "用户指定查数据"
+        if mode == "file":
+            return INTENT_FILE_ANALYSIS, 1.0, "上传表格分析"
+
+        intent, confidence, reason = self._classify_intent(question)
+        if intent == INTENT_DATA_QUERY and not settings.TEXT2SQL_ENABLED:
+            return INTENT_DOC_SEARCH, confidence, "Text2SQL 未启用，回退为文档检索"
+        return intent, confidence, reason
+
     def _classify_intent(self, question: str) -> tuple[str, float, str]:
         try:
             return intent_service.classify(question)
@@ -246,20 +281,6 @@ class ChatService:
             logger.error(f"Casual chat pipeline error: {exc}")
             return f"生成回答失败: {exc}", None, [], None, None
 
-    def _handle_data_query(self, question: str) -> tuple[str, str | None, list, str | None, str | None]:
-        from services.llm_service import llm_service
-        from services.text2sql_service import text2sql_service
-
-        try:
-            sql, summary, columns, rows = text2sql_service.query(question)
-            result_json = json.dumps({"columns": columns, "rows": rows}, ensure_ascii=False, default=str)
-            cfg = llm_service._resolve_llm_config()
-            model_used = cfg["model_name"] if cfg else None
-            return summary, model_used, [], sql, result_json
-        except Exception as exc:
-            logger.error(f"Text2SQL pipeline error: {exc}")
-            return f"数据查询失败: {exc}", None, [], None, None
-
     def _handle_doc_search(
         self, db: Session, question: str, user_id: int, history: list[tuple[str, str]] | None = None
     ) -> tuple[str, str | None, list, str | None, str | None]:
@@ -273,55 +294,183 @@ class ChatService:
         answer, model_used = llm_service.generate_answer(question, contexts)
         return answer, model_used, [c.model_dump() for c in citations], None, None
 
+    # ------------------------------------------------------------------
+    # 数据查询（text2SQL 链路）
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _extract_data_history(messages: list[ChatMessage]) -> list[dict]:
+        """提取最近 3 轮数据查询对话（text2SQL 多轮上下文格式：question/sql/answer）。"""
+        turns: list[dict] = []
+        prev_user: str | None = None
+        for msg in messages:
+            if msg.role == "user":
+                prev_user = msg.content
+            elif msg.role == "assistant" and prev_user is not None:
+                if msg.intent == INTENT_DATA_QUERY:
+                    turns.append(
+                        {
+                            "question": prev_user[:4000],
+                            "sql": (msg.generated_sql or "")[:8000],
+                            "answer": (msg.content or "")[:4000],
+                        }
+                    )
+                prev_user = None
+        return turns[-3:]
+
+    @staticmethod
+    def _run_text2sql_query(db: Session, question: str, user_id: int, data_history: list[dict], progress_callback=None) -> dict:
+        """调用 text2SQL facade 执行一次数据查询，返回原始 payload。"""
+        from services.text2sql import config_service, facade_service
+
+        runtime_config = config_service.get_runtime_config(db, user_id=user_id)
+        runtime_config["history"] = data_history or []
+        return facade_service.query(
+            question,
+            db,
+            runtime_config=runtime_config,
+            user_id=user_id,
+            progress_callback=progress_callback,
+        )
+
+    @staticmethod
+    def _apply_text2sql_payload(ctx: dict, payload: dict) -> None:
+        """把 facade 返回载荷写入流式上下文（SQL、结果集、回答）。"""
+        sql = str(payload.get("sql") or "")
+        columns = list(payload.get("columns") or [])
+        rows = list(payload.get("rows") or [])
+        clarification = str(payload.get("clarification") or "")
+        answer = clarification or str(payload.get("answer") or "")
+
+        ctx["generated_sql"] = sql or None
+        if columns:
+            ctx["sql_result_json"] = json.dumps({"columns": columns, "rows": rows}, ensure_ascii=False)
+        ctx["full_answer"] = answer or "查询完成，但未生成回答。"
+
+    def _handle_data_query(
+        self, db: Session, question: str, user_id: int, data_history: list[dict] | None = None
+    ) -> tuple[str, str | None, list, str | None, str | None]:
+        from services.llm_service import llm_service
+
+        try:
+            payload = self._run_text2sql_query(db, question, user_id, data_history or [])
+        except Exception as exc:
+            logger.error(f"Chat data query failed: {exc}")
+            return f"数据查询失败: {exc}", None, [], None, None
+
+        ctx: dict = {"full_answer": "", "generated_sql": None, "sql_result_json": None}
+        self._apply_text2sql_payload(ctx, payload)
+        return (
+            ctx["full_answer"],
+            llm_service._resolved_model_name,
+            [],
+            ctx["generated_sql"],
+            ctx["sql_result_json"],
+        )
+
+    def _stream_data_query(
+        self, question: str, user_id: int, ctx: dict, data_history: list[dict] | None = None
+    ) -> Generator[str, None, None]:
+        """流式数据查询：facade 在子线程内跑（独立 DB 会话），进度经队列桥接为 SSE。"""
+        from services.llm_service import llm_service
+
+        queue: Queue[tuple[str, dict] | None] = Queue()
+
+        def emit_progress(event: str, data: dict) -> None:
+            queue.put((event, data))
+
+        def worker() -> None:
+            worker_db = SessionLocal()
+            try:
+                payload = self._run_text2sql_query(
+                    worker_db, question, user_id, data_history or [], progress_callback=emit_progress
+                )
+                queue.put(("__done__", payload))
+            except Exception as exc:  # noqa: BLE001
+                queue.put(("__error__", {"message": str(exc)}))
+            finally:
+                worker_db.close()
+                queue.put(None)
+
+        yield _sse("status", {"step": "routing", "message": "正在分析数据查询..."})
+        Thread(target=worker, daemon=True).start()
+
+        while True:
+            item = queue.get()
+            if item is None:
+                break
+            event, data = item
+            if event == "__done__":
+                self._apply_text2sql_payload(ctx, data)
+                ctx["model_used"] = llm_service._resolved_model_name
+                if ctx["sql_result_json"]:
+                    yield _sse("sql_result", json.loads(ctx["sql_result_json"]))
+                if ctx["full_answer"]:
+                    yield _sse("delta", {"content": ctx["full_answer"]})
+            elif event == "__error__":
+                ctx["full_answer"] = f"数据查询失败: {data.get('message', '未知错误')}"
+                yield _sse("delta", {"content": ctx["full_answer"]})
+            elif event == "status":
+                yield _sse("status", data)
+            # facade 的其他进度事件（如 sql_generated）不直接透传，避免前端无法识别
+
+    # ------------------------------------------------------------------
+    # 上传表格分析（短期存储，分析后删除）
+    # ------------------------------------------------------------------
+
+    def _handle_file_analysis(
+        self, question: str, upload_id: str | None, user_id: int
+    ) -> tuple[str, str | None, list, str | None, str | None]:
+        ctx: dict = {
+            "full_answer": "",
+            "model_used": None,
+            "citations_data": [],
+            "generated_sql": None,
+            "sql_result_json": None,
+        }
+        for _ in self._stream_file_analysis(question, upload_id, user_id, ctx):
+            pass
+        return ctx["full_answer"], ctx["model_used"], [], ctx["generated_sql"], ctx["sql_result_json"]
+
+    def _stream_file_analysis(
+        self, question: str, upload_id: str | None, user_id: int, ctx: dict
+    ) -> Generator[str, None, None]:
+        from services.chat_upload_service import chat_upload_service
+
+        if not upload_id:
+            ctx["full_answer"] = "请先上传要分析的表格文件（支持 csv/xlsx/xls）。"
+            yield _sse("delta", {"content": ctx["full_answer"]})
+            return
+
+        try:
+            for event, data in chat_upload_service.analyze_stream(upload_id, user_id, question):
+                if event == "status":
+                    yield _sse("status", data)
+                elif event == "sql_result":
+                    ctx["generated_sql"] = data.get("sql")
+                    result = {"columns": data.get("columns", []), "rows": data.get("rows", [])}
+                    ctx["sql_result_json"] = json.dumps(result, ensure_ascii=False)
+                    yield _sse("sql_result", result)
+                elif event == "model":
+                    ctx["model_used"] = data.get("model_used")
+                elif event == "delta":
+                    chunk = data.get("content", "")
+                    if chunk:
+                        ctx["full_answer"] += chunk
+                        yield _sse("delta", {"content": chunk})
+        except BusinessError as exc:
+            ctx["full_answer"] = ctx["full_answer"] or f"表格分析失败: {exc.message}"
+            yield _sse("delta", {"content": f"表格分析失败: {exc.message}"})
+        except Exception as exc:  # noqa: BLE001
+            logger.error(f"File analysis failed: {exc}")
+            ctx["full_answer"] = ctx["full_answer"] or f"表格分析失败: {exc}"
+            yield _sse("delta", {"content": f"表格分析失败: {exc}"})
+
     def _stream_casual_chat(self, question: str, ctx: dict) -> Generator[str, None, None]:
         from services.llm_service import llm_service
 
         yield _sse("status", {"step": "generating", "message": "正在生成回答..."})
         for chunk, is_model_info, model_name in llm_service.stream_merged_answer(question):
-            if is_model_info:
-                ctx["model_used"] = model_name
-                continue
-            if chunk:
-                ctx["full_answer"] += chunk
-                yield _sse("delta", {"content": chunk})
-
-    def _stream_data_query(self, question: str, ctx: dict) -> Generator[str, None, None]:
-        from services.text2sql_service import text2sql_service
-
-        yield _sse("status", {"step": "generating_sql", "message": "正在生成查询语句..."})
-        try:
-            sql = text2sql_service.generate_sql(question)
-        except Exception as exc:
-            yield _sse("status", {"step": "sql_error", "message": f"SQL 生成失败: {exc}"})
-            ctx["full_answer"] = f"抱歉，无法为您的问题生成查询语句。错误: {exc}"
-            yield _sse("delta", {"content": ctx["full_answer"]})
-            return
-
-        ctx["generated_sql"] = sql
-        is_valid, err_msg = text2sql_service.validate_sql(sql)
-        if not is_valid:
-            yield _sse("status", {"step": "sql_error", "message": f"SQL 安全校验未通过: {err_msg}"})
-            ctx["full_answer"] = f"生成的 SQL 未通过安全校验: {err_msg}"
-            yield _sse("delta", {"content": ctx["full_answer"]})
-            return
-
-        yield _sse("status", {"step": "executing_sql", "message": "正在查询数据库..."})
-        try:
-            columns, rows = text2sql_service.execute_sql(sql)
-        except Exception as exc:
-            yield _sse("status", {"step": "sql_error", "message": f"SQL 执行失败: {exc}"})
-            ctx["full_answer"] = f"查询执行出错: {exc}"
-            yield _sse("delta", {"content": ctx["full_answer"]})
-            return
-
-        result_data = {"columns": columns, "rows": rows}
-        ctx["sql_result_json"] = json.dumps(result_data, ensure_ascii=False, default=str)
-        yield _sse("sql_result", result_data)
-
-        yield _sse("status", {"step": "summarizing", "message": "正在分析查询结果..."})
-        for chunk, is_model_info, model_name in text2sql_service.stream_summarize_result(
-            question, sql, columns, rows
-        ):
             if is_model_info:
                 ctx["model_used"] = model_name
                 continue

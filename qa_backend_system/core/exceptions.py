@@ -49,22 +49,8 @@ class BusinessError(AppException):
         super().__init__(message, code=400)
 
 
-class AuthenticationError(AppException):
-    """认证失败异常（缺少或无效的令牌）。"""
-
-    def __init__(self, message: str = "认证失败"):
-        super().__init__(message, code=401)
-
-
-class PermissionDeniedError(AppException):
-    """权限不足异常（已认证但无权访问该资源）。"""
-
-    def __init__(self, message: str = "无权限访问该资源"):
-        super().__init__(message, code=403)
-
-
 class ExternalServiceError(AppException):
-    """外部服务调用失败异常（MinIO、Milvus 等）。"""
+    """外部服务调用失败异常（MinIO、Elasticsearch 等）。"""
 
     def __init__(self, message: str):
         super().__init__(message, code=502)

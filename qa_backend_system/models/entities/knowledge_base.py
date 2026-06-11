@@ -19,6 +19,13 @@ class KnowledgeBase(Base):
     user_id: Mapped[int] = mapped_column(BigInteger, nullable=False, index=True, comment="所属用户ID")
     name: Mapped[str] = mapped_column(String(128), nullable=False, comment="知识库名称")
     description: Mapped[Optional[str]] = mapped_column(String(512), nullable=True, comment="知识库描述")
+    purpose: Mapped[str] = mapped_column(
+        String(32),
+        nullable=False,
+        default="document",
+        server_default="document",
+        comment="知识库用途: document=文档问答, table_desc=text2SQL表描述, few_shot=text2SQL示例",
+    )
     default_chunk_size: Mapped[int] = mapped_column(Integer, default=1000, nullable=False, comment="默认文本块大小")
     default_chunk_overlap: Mapped[int] = mapped_column(Integer, default=200, nullable=False, comment="默认重叠大小")
     default_separators: Mapped[Optional[str]] = mapped_column(Text, nullable=True, comment="默认分隔符列表(JSON数组)")

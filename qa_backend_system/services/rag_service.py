@@ -1,6 +1,6 @@
 """
 RAG 服务层：文档解析与向量索引管道。
-包含文件文本提取（支持 PDF/DOCX/XLSX/图片 OCR 等）、文本切分、Embedding 向量化、Milvus 入库。
+包含文件文本提取（支持 PDF/DOCX/XLSX/图片 OCR 等）、文本切分、Embedding 向量化、Elasticsearch 入库。
 """
 
 import json
@@ -17,11 +17,11 @@ from unstructured.partition.auto import partition
 from core.logger import logger
 from models.entities import DocumentChunk, KnowledgeBase, KnowledgeFile
 from repositories.file_repo import FileRepo
-from repositories.milvus_repo import milvus_repo
+from repositories.elasticsearch_repo import es_repo
 from repositories.minio_repo import minio_repo
 from services.embeddings import get_embeddings
 
-# TODO：这里需要进行重构，后续不再支持IMAGE_EXTENSIONS，去config中查看TODO中后续要支持的类型，同时minio中只存储源文件，milvus中只存储文本块和向量（即将文件中ocr识别的内容），
+# TODO：这里需要进行重构，后续不再支持IMAGE_EXTENSIONS，去config中查看TODO中后续要支持的类型，同时minio中只存储源文件，elasticsearch中只存储文本块和向量（即将文件中ocr识别的内容），
 
 # ── Image file extensions handled as pure images (OCR/description) ────
 IMAGE_EXTENSIONS = {"png", "jpg", "jpeg", "bmp", "tiff", "webp", "gif"}
@@ -105,7 +105,7 @@ class RAGService:
             }
             for chunk, vector in zip(saved_chunks, vectors)
         ]
-        milvus_repo.insert_chunks(file_entity.kb_id, vector_rows)
+        es_repo.insert_chunks(file_entity.kb_id, vector_rows)
         logger.info(f"Indexed {len(saved_chunks)} chunks for file: {file_entity.file_name}")
 
     def _extract_text(self, file_entity: KnowledgeFile, kb_entity: KnowledgeBase) -> str:

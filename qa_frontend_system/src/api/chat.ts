@@ -1,5 +1,16 @@
 import request from '../utils/request'
 
+/** 问答模式：auto=智能判断，docs=查文档（RAG），data=查数据（text2SQL），file=上传表格分析 */
+export type ChatMode = 'auto' | 'docs' | 'data' | 'file'
+
+export interface ChatUploadInfo {
+  upload_id: string
+  file_name: string
+  row_count: number
+  columns: string[]
+  expires_in_seconds: number
+}
+
 export interface ChatCitation {
   chunk_id: number
   kb_id: number
@@ -139,27 +150,39 @@ export const createChatSession = (title = '新对话') =>
 export const getChatSessionDetail = (sessionId: number) =>
   request.get<any, ChatSessionDetail>(`/chat/sessions/${sessionId}`)
 
-export const appendChatMessage = (sessionId: number, question: string) =>
-  request.post<any, ChatMessageCreateResponse>(`/chat/sessions/${sessionId}/messages`, { question })
+export interface ChatSendOptions {
+  mode?: ChatMode
+  uploadId?: string | null
+}
+
+export const appendChatMessage = (sessionId: number, question: string, options: ChatSendOptions = {}) =>
+  request.post<any, ChatMessageCreateResponse>(`/chat/sessions/${sessionId}/messages`, {
+    question,
+    mode: options.mode ?? 'auto',
+    upload_id: options.uploadId ?? null,
+  })
 
 export const appendChatMessageStream = (
   sessionId: number,
   question: string,
   handlers: StreamHandlers,
+  options: ChatSendOptions = {},
 ): (() => void) => {
   const abortController = new AbortController()
 
   const fetchStream = async () => {
     try {
-      const token = localStorage.getItem('qa_access_token')
       const response = await fetch(`/api/v1/chat/sessions/${sessionId}/messages/stream`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           Accept: 'text/event-stream',
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
-        body: JSON.stringify({ question }),
+        body: JSON.stringify({
+          question,
+          mode: options.mode ?? 'auto',
+          upload_id: options.uploadId ?? null,
+        }),
         signal: abortController.signal,
       })
 
@@ -211,3 +234,16 @@ export const deleteChatSession = (sessionId: number) =>
 
 export const renameChatSession = (sessionId: number, title: string) =>
   request.patch<any, ChatSessionSummary>(`/chat/sessions/${sessionId}`, { title })
+
+/** 上传表格用于聊天数据分析（短期存储，分析完成后后端自动删除） */
+export const uploadChatTable = (file: File) => {
+  const formData = new FormData()
+  formData.append('file', file)
+  return request.post<any, ChatUploadInfo>('/chat/uploads', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  })
+}
+
+/** 手动删除聊天上传的表格（用户移除文件时调用） */
+export const deleteChatUpload = (uploadId: string) =>
+  request.delete<any, null>(`/chat/uploads/${uploadId}`)

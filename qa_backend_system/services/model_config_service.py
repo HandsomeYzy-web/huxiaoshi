@@ -2,6 +2,7 @@
 
 from sqlalchemy.orm import Session
 
+from core.connection_password_cipher import secret_cipher
 from core.exceptions import ResourceNotFoundError, DuplicateResourceError, BusinessError
 from core.logger import logger
 from models.entities.model_config import ModelConfig
@@ -30,7 +31,8 @@ def _to_response(config: ModelConfig) -> ModelConfigResponse:
         name=config.name,
         model_name=config.model_name,
         api_base_url=config.api_base_url,
-        api_key_masked=_mask_api_key(config.api_key),
+        # 库里存的是密文，先解密再打码（兼容历史明文行：无前缀时原样返回）
+        api_key_masked=_mask_api_key(secret_cipher.decrypt(config.api_key)),
         is_active=config.is_active,
         extra_params=config.extra_params,
         created_at=config.created_at,
@@ -66,7 +68,7 @@ class ModelConfigService:
             name=req.name,
             model_name=req.model_name,
             api_base_url=req.api_base_url,
-            api_key=req.api_key,
+            api_key=secret_cipher.encrypt(req.api_key),  # 密钥加密落库
             is_active=False,
             extra_params=req.extra_params,
         )
@@ -81,6 +83,15 @@ class ModelConfigService:
             raise ResourceNotFoundError(f"模型配置 ID={config_id} 不存在")
 
         update_data = req.model_dump(exclude_unset=True)
+        # API Key 处理：前端只拿得到脱敏值（含 ****），回传脱敏占位或空值时视为「不修改」，
+        # 仅当传入了真正的新明文 key 时才加密覆盖，避免把打码串当成新 key 写坏。
+        if "api_key" in update_data:
+            new_key = (update_data["api_key"] or "").strip()
+            if not new_key or "****" in new_key:
+                update_data.pop("api_key")
+            else:
+                update_data["api_key"] = secret_cipher.encrypt(new_key)
+
         updated = repo.update(config_id, update_data)
 
         if config.is_active:
@@ -186,14 +197,14 @@ class ModelConfigService:
         """
         重建所有知识库的向量数据（Embedding 模型切换后调用）。
         流程：
-        1. 删除每个 KB 的 Milvus collection
+        1. 删除每个 KB 的 Elasticsearch index
         2. 将所有已完成文件重置为「处理中」
         3. 为每个文件提交 reprocess 异步任务
         Returns: { total_kbs, total_files }
         """
         from repositories.kb_repo import KBRepo
         from repositories.file_repo import FileRepo
-        from repositories.milvus_repo import milvus_repo
+        from repositories.elasticsearch_repo import es_repo
         from tasks.document_tasks import reprocess_document_task
 
         kb_repo = KBRepo(db)
@@ -202,11 +213,11 @@ class ModelConfigService:
 
         total_files = 0
         for kb in all_kbs:
-            # Drop existing Milvus collection (will be recreated with new dim)
+            # Drop existing Elasticsearch index (will be recreated with new dim)
             try:
-                milvus_repo.delete_chunks_by_kb_id(kb.id)
+                es_repo.delete_chunks_by_kb_id(kb.id)
             except Exception as e:
-                logger.warning(f"Failed to drop Milvus collection for kb_id={kb.id}: {e}")
+                logger.warning(f"Failed to drop Elasticsearch index for kb_id={kb.id}: {e}")
 
             # Get all successfully processed files in this KB
             files = file_repo.get_files_by_kb(kb.id)

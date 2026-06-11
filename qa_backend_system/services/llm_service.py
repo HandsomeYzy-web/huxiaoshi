@@ -12,6 +12,7 @@ from langchain_core.prompts import ChatPromptTemplate
 from langchain_openai import ChatOpenAI
 
 from core.config import settings
+from core.connection_password_cipher import secret_cipher
 from core.database import SessionLocal
 from core.logger import logger
 from core.url_utils import normalize_llm_base_url
@@ -80,7 +81,7 @@ class LLMService:
                             pass
                     return {
                         "base_url": active.api_base_url,
-                        "api_key": active.api_key,
+                        "api_key": secret_cipher.decrypt(active.api_key),  # 解密落库密文
                         "model_name": active.model_name,
                         "provider": active.provider,
                         "extra_params": extra,

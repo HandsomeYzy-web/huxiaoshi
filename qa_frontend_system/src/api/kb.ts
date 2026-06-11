@@ -1,9 +1,13 @@
 import request from '../utils/request'
 
+/** 知识库用途：document=文档问答（默认），table_desc / few_shot 为 text2SQL 专用保留库 */
+export type KnowledgeBasePurpose = 'document' | 'table_desc' | 'few_shot'
+
 export interface KnowledgeBase {
   id: number
   name: string
   description: string
+  purpose: KnowledgeBasePurpose
   default_chunk_size: number
   default_chunk_overlap: number
   retrieval_top_k: number
@@ -15,6 +19,7 @@ export interface KnowledgeBase {
 export interface CreateKnowledgeBasePayload {
   name: string
   description?: string
+  purpose: KnowledgeBasePurpose
   default_chunk_size: number
   default_chunk_overlap: number
   retrieval_top_k: number
@@ -23,7 +28,9 @@ export interface CreateKnowledgeBasePayload {
 }
 
 export interface UpdateKnowledgeBasePayload {
+  name?: string
   description?: string
+  purpose?: KnowledgeBasePurpose
   default_chunk_size?: number
   default_chunk_overlap?: number
   retrieval_top_k?: number

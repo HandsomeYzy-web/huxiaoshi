@@ -2,7 +2,8 @@
 
 from typing import Optional
 
-from sqlalchemy import func, select, update
+from sqlalchemy import func, select, text, update
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 
 from core.logger import logger
@@ -19,9 +20,35 @@ class ChatRepo:
 
     def create_chat_session(self, session: ChatSession) -> ChatSession:
         self.db.add(session)
-        self.db.commit()
-        self.db.refresh(session)
-        return session
+        try:
+            self.db.commit()
+            self.db.refresh(session)
+            return session
+        except OperationalError as exc:
+            self.db.rollback()
+            error_text = str(exc)
+            if "Field 'is_deleted' doesn't have a default value" not in error_text:
+                raise
+
+            # Compatibility fallback for legacy schemas where chat_session.is_deleted
+            # exists but has no default value configured.
+            insert_stmt = text(
+                "INSERT INTO chat_session (user_id, title, is_deleted) VALUES (:user_id, :title, 0)"
+            )
+            result = self.db.execute(
+                insert_stmt,
+                {
+                    "user_id": int(session.user_id),
+                    "title": str(session.title),
+                },
+            )
+            self.db.commit()
+
+            inserted_id = int(result.lastrowid or 0)
+            recovered = self.db.get(ChatSession, inserted_id) if inserted_id > 0 else None
+            if recovered is None:
+                raise RuntimeError("创建聊天会话失败：无法读取新建会话记录") from exc
+            return recovered
 
     # ── ChatSession 查询 ──────────────────────────────────────────────
 

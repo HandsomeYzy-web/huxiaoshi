@@ -5,7 +5,7 @@ from core.database import SessionLocal
 from core.logger import logger
 from repositories.file_repo import FileRepo
 from repositories.kb_repo import KBRepo
-from repositories.milvus_repo import milvus_repo
+from repositories.elasticsearch_repo import es_repo
 from services.rag_service import rag_service
 
 
@@ -32,12 +32,12 @@ def process_document_task(self, file_id: int):
         rag_service.process_and_embed_file(db, file_entity, kb_entity)
 
         # 竞态校验：处理完成后再次确认文件仍存在
-        # 若用户在任务执行期间删除了该文件，需清理刚写入 Milvus 的向量
+        # 若用户在任务执行期间删除了该文件，需清理刚写入 Elasticsearch 的向量
         if not repo.get_file_by_id(file_id):
             logger.warning(
-                f"File was deleted during processing, cleaning up Milvus: file_id={file_id}"
+                f"File was deleted during processing, cleaning up Elasticsearch: file_id={file_id}"
             )
-            milvus_repo.delete_chunks_by_file_id(kb_id, file_id)
+            es_repo.delete_chunks_by_file_id(kb_id, file_id)
             return
 
         repo.update_file_status(file_id, status=2)
@@ -70,17 +70,17 @@ def reprocess_document_task(self, file_id: int):
         repo.update_file_status(file_id, status=1)
 
         repo.delete_chunks_by_file_id(file_id)
-        milvus_repo.delete_chunks_by_file_id(kb_id, file_id)
+        es_repo.delete_chunks_by_file_id(kb_id, file_id)
 
         rag_service.process_and_embed_file(db, file_entity, kb_entity)
 
         # 竞态校验：处理完成后再次确认文件仍存在
-        # 若用户在任务执行期间删除了该文件，需清理刚写入 Milvus 的向量
+        # 若用户在任务执行期间删除了该文件，需清理刚写入 Elasticsearch 的向量
         if not repo.get_file_by_id(file_id):
             logger.warning(
-                f"File was deleted during reprocessing, cleaning up Milvus: file_id={file_id}"
+                f"File was deleted during reprocessing, cleaning up Elasticsearch: file_id={file_id}"
             )
-            milvus_repo.delete_chunks_by_file_id(kb_id, file_id)
+            es_repo.delete_chunks_by_file_id(kb_id, file_id)
             return
 
         repo.update_file_status(file_id, status=2)

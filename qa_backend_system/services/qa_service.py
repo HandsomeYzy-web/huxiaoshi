@@ -1,7 +1,7 @@
 """
 QA 服务层 — 检索增强生成（RAG）管道。
 
-使用向量查询（Milvus）进行语义检索，可选 Rerank 精排后返回最终结果集。
+使用向量查询（Elasticsearch）进行语义检索，可选 Rerank 精排后返回最终结果集。
 
 The retrieval step is encapsulated as a LangChain RunnableLambda so it can be
 composed into any LCEL chain.
@@ -23,9 +23,9 @@ from models.schemas.qa_schema import (
 )
 from repositories.kb_repo import KBRepo
 from repositories.file_repo import FileRepo
-from repositories.kb_access_repo import get_accessible_kb_ids
-from repositories.milvus_repo import milvus_repo
+from repositories.elasticsearch_repo import es_repo
 from services import embeddings
+from services.kb_scope import filter_document_kbs, get_document_kb_ids, is_reserved_kb
 from services.llm_service import llm_service
 from services.reranker_service import reranker_service
 
@@ -63,7 +63,8 @@ class QAService:
         )
 
     def chat(self, db: Session, request: ChatAskRequest, user_id: int) -> ChatAskResponse:
-        accessible_ids = get_accessible_kb_ids(db, user_id)
+        # 知识库隔离：文档问答不检索 text2SQL 专用的 table_desc / few-shot 保留库。
+        accessible_ids = get_document_kb_ids(db)
         if not accessible_ids:
             raise ValueError("No knowledge bases available")
 
@@ -87,7 +88,8 @@ class QAService:
         self, db: Session, question: str, user_id: int, top_k: int | None = None
     ) -> dict:
         """仅检索，不生成答案。返回 {"citations": list[CitationItem], "contexts": list[str]}"""
-        accessible_ids = get_accessible_kb_ids(db, user_id)
+        # 知识库隔离：排除 text2SQL 专用的 table_desc / few-shot 保留库。
+        accessible_ids = get_document_kb_ids(db)
         if not accessible_ids:
             return {"citations": [], "contexts": []}
 
@@ -108,7 +110,8 @@ class QAService:
         """使用原始 query 和改写 query 分别检索知识库，合并去重后返回最终结果。
         返回 {"citations": list[CitationItem], "contexts": list[str]}
         """
-        accessible_ids = get_accessible_kb_ids(db, user_id)
+        # 知识库隔离：排除 text2SQL 专用的 table_desc / few-shot 保留库。
+        accessible_ids = get_document_kb_ids(db)
         if not accessible_ids:
             return {"citations": [], "contexts": []}
 
@@ -147,7 +150,7 @@ class QAService:
     ) -> RunnableLambda:
         """
         Returns a LangChain RunnableLambda that performs pure vector retrieval:
-        1. Vector search via Milvus (semantic similarity)
+        1. Vector search via Elasticsearch (semantic similarity)
         2. Optional reranking
 
         When a single KB is targeted, its own retrieval_top_k / retrieval_score_threshold
@@ -173,19 +176,18 @@ class QAService:
             # 启用 rerank 时先多取候选集
             fetch_k = _top_k * 3 if _enable_rerank else _top_k
 
-            # ── 1. Vector search (Milvus) ─────────────────────────
+            # ── 1. Vector search (Elasticsearch) ──────────────────
             if kb_ids and len(kb_ids) == 1:
-                vector_results = milvus_repo.search_chunks(kb_ids[0], query_vector, top_k=fetch_k)
+                vector_results = es_repo.search_chunks(kb_ids[0], query_vector, top_k=fetch_k)
             elif kb_ids:
-                vector_results = milvus_repo.search_chunks_across_kbs(kb_ids, query_vector, top_k=fetch_k)
+                vector_results = es_repo.search_chunks_across_kbs(kb_ids, query_vector, top_k=fetch_k)
             else:
-                # No kb_ids specified — need to get all KB ids
-                all_kbs = kb_repo.get_all_kbs()
-                all_kb_ids = [kb.id for kb in all_kbs]
+                # 未指定 kb_ids 时检索全部文档知识库（隔离规则已排除 text2SQL 保留库）
+                all_kb_ids = [kb.id for kb in filter_document_kbs(kb_repo.get_all_kbs())]
                 if not all_kb_ids:
                     vector_results = []
                 else:
-                    vector_results = milvus_repo.search_chunks_across_kbs(all_kb_ids, query_vector, top_k=fetch_k)
+                    vector_results = es_repo.search_chunks_across_kbs(all_kb_ids, query_vector, top_k=fetch_k)
 
             # Apply score threshold filter
             if _score_threshold > 0.0:
@@ -266,7 +268,7 @@ class QAService:
     def _resolve_target_kb_ids(
         self, db: Session, repo: KBRepo, kb_id: int | None, kb_ids: list[int], user_id: int
     ) -> list[int]:
-        from core.exceptions import PermissionDeniedError, ResourceNotFoundError
+        from core.exceptions import BusinessError, ResourceNotFoundError
 
         normalized_ids = list(dict.fromkeys([*kb_ids, *([kb_id] if kb_id else [])]))
         if not normalized_ids:
@@ -278,10 +280,13 @@ class QAService:
             missing_ids = [item for item in normalized_ids if item not in found_ids]
             raise ResourceNotFoundError(f"Knowledge bases not found: kb_ids={missing_ids}")
 
-        accessible_kb_ids = get_accessible_kb_ids(db, user_id)
-        denied = [item for item in normalized_ids if item not in accessible_kb_ids]
-        if denied:
-            raise PermissionDeniedError(f"Knowledge bases not accessible: kb_ids={denied}")
+        # 知识库隔离：table_desc / few-shot 为 text2SQL 专用保留库，文档问答不可指定。
+        reserved_names = [str(kb.name) for kb in kbs if is_reserved_kb(kb)]
+        if reserved_names:
+            raise BusinessError(
+                f"知识库 {reserved_names} 为 text2SQL 专用保留库，不可用于文档问答"
+            )
+
         return [kb.id for kb in kbs]
 
 

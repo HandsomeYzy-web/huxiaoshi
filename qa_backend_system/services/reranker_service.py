@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import httpx
 
+from core.connection_password_cipher import secret_cipher
 from core.exceptions import ExternalServiceError
 from core.logger import logger
 from core.url_utils import normalize_rerank_base_url
@@ -26,7 +27,7 @@ class RerankerService:
             try:
                 active = ModelConfigRepo(db).get_active("rerank")
                 if active:
-                    return True, active.api_base_url, active.api_key, active.model_name
+                    return True, active.api_base_url, secret_cipher.decrypt(active.api_key), active.model_name
             finally:
                 db.close()
         except Exception:

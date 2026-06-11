@@ -1,5 +1,5 @@
 import axios from 'axios'
-import type { AxiosInstance, AxiosResponse, InternalAxiosRequestConfig } from 'axios'
+import type { AxiosInstance, AxiosResponse } from 'axios'
 import { ElMessage } from 'element-plus'
 
 export interface ApiResponse<T = unknown> {
@@ -13,17 +13,6 @@ const service: AxiosInstance = axios.create({
   timeout: 50000,
 })
 
-service.interceptors.request.use(
-  (config: InternalAxiosRequestConfig) => {
-    const token = localStorage.getItem('qa_access_token')
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`
-    }
-    return config
-  },
-  (error: unknown) => Promise.reject(error),
-)
-
 service.interceptors.response.use(
   <T>(response: AxiosResponse<ApiResponse<T>>) => {
     const payload = response.data
@@ -34,14 +23,6 @@ service.interceptors.response.use(
     return payload.data
   },
   (error: any) => {
-    if (error?.response?.status === 401) {
-      localStorage.removeItem('qa_access_token')
-      if (window.location.pathname !== '/login') {
-        window.location.href = '/login'
-      }
-      return Promise.reject(error)
-    }
-
     const message =
       error?.response?.data?.message ||
       error?.message ||

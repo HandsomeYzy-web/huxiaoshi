@@ -1,12 +1,13 @@
 :root {
   font-family:
-    "Segoe UI",
+    "Inter",
+    "Source Han Sans SC",
     "PingFang SC",
     "Hiragino Sans GB",
     "Microsoft YaHei",
     sans-serif;
-  color: #1f2d29;
-  background: #eef3ef;
+  color: #2f221a;
+  background: #f5efe7;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
@@ -17,8 +18,17 @@
   box-sizing: border-box;
 }
 
-body {
+html,
+body,
+#app {
+  width: 100%;
   min-width: 320px;
+  min-height: 100%;
+}
+
+body {
+  margin: 0;
+  background: #f5efe7;
 }
 
 a {

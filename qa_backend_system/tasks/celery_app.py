@@ -1,7 +1,7 @@
 from celery import Celery
 from celery.signals import worker_process_init
 from core.config import settings
-from core.milvus import ensure_milvus_connection
+from core.elasticsearch import get_es_client
 
 # 1. 初始化 Celery 实例
 # 第一个参数是当前模块的名称，这里命名为 "qa_backend_tasks"
@@ -39,20 +39,21 @@ celery_app.conf.update(
 
 
 @worker_process_init.connect
-def init_worker_milvus_connection(**kwargs):
+def init_worker_es_connection(**kwargs):
     """
-    🟢 关键修复：Celery Worker 进程启动时建立 Milvus 连接
-    每个 Worker 是独立进程，需要单独建立 pymilvus 全局连接
-    这样 langchain_milvus.Milvus 在内部使用 Collection(using="default") 时才能找到连接
+    Celery Worker 进程启动时初始化 Elasticsearch 客户端并做一次连通性探测。
+
+    Elasticsearch 客户端基于 HTTP，连接池由客户端内部维护，无需像 pymilvus 那样
+    为每个 Worker 进程单独建立全局连接；这里仅 ping 一次以便尽早发现配置/网络问题。
+    探测失败不阻断 Worker 启动（ES 可能稍后就绪，客户端会自动重连）。
     """
     from core.logger import logger
 
     try:
-        ensure_milvus_connection()
-        logger.info(f"[Worker 初始化] Milvus 连接已建立: {settings.MILVUS_HOST}:{settings.MILVUS_PORT}")
+        get_es_client().info()
+        logger.info(f"[Worker 初始化] Elasticsearch 连接已就绪: {settings.ES_URL}")
     except Exception as e:
-        logger.error(f"[Worker 初始化] Milvus 连接失败: {e}")
-        raise
+        logger.warning(f"[Worker 初始化] Elasticsearch 连通性探测失败（将在任务执行时重试）: {e}")
 
 
 if __name__ == "__main__":

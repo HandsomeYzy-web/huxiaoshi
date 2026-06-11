@@ -46,6 +46,15 @@ class KBRepo:
         )
         return list(self.db.scalars(stmt).all())
 
+    def get_kbs_by_purpose(self, purpose: str) -> list[KnowledgeBase]:
+        """按用途查询知识库（document / table_desc / few_shot），新创建的在前。"""
+        stmt = (
+            select(KnowledgeBase)
+            .where(KnowledgeBase.purpose == purpose)
+            .order_by(KnowledgeBase.created_at.desc())
+        )
+        return list(self.db.scalars(stmt).all())
+
     def get_kbs_by_ids(self, kb_ids: Iterable[int]) -> list[KnowledgeBase]:
         kb_ids = list(kb_ids)
         if not kb_ids:

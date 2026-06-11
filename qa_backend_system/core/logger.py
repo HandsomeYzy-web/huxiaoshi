@@ -1,21 +1,31 @@
-"""日志配置模块：基于 loguru 配置控制台、常规日志文件、错误日志文件三路输出。"""
-
 import os
 import sys
 
 from loguru import logger
 
-# 确保 logs 目录存在
 LOG_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "logs")
 os.makedirs(LOG_DIR, exist_ok=True)
 
 
-def setup_logger():
-    """初始化日志系统：配置控制台彩色输出、Info 日志文件、Error 独立日志文件。"""
-    # 移除默认的控制台输出，防止重复打印
+def _safe_add_file_sink(path: str, **kwargs) -> None:
+    """
+    Prefer async logging, but fall back to sync mode when OS policy blocks
+    multiprocessing pipe creation (WinError 5).
+    """
+    try:
+        logger.add(path, enqueue=True, **kwargs)
+    except PermissionError:
+        logger.add(path, enqueue=False, **kwargs)
+    except OSError as exc:
+        if getattr(exc, "winerror", None) == 5:
+            logger.add(path, enqueue=False, **kwargs)
+        else:
+            raise
+
+
+def setup_logger() -> None:
     logger.remove()
 
-    # 1. 终端标准输出 (带有颜色和美化，方便本地开发调试)
     logger.add(
         sys.stdout,
         level="DEBUG",
@@ -27,24 +37,20 @@ def setup_logger():
         ),
     )
 
-    # 2. 常规日志文件存储 (Info 及以上级别)
-    logger.add(
+    _safe_add_file_sink(
         os.path.join(LOG_DIR, "app_info.log"),
         level="INFO",
-        rotation="500 MB",     # 日志文件达到 500MB 时自动切分创建一个新文件
-        retention="30 days",   # 历史日志最多保留 30 天，自动清理旧日志
+        rotation="500 MB",
+        retention="30 days",
         encoding="utf-8",
-        enqueue=True           # 开启异步写入，保证多线程/异步环境下的安全性
     )
 
-    # 3. 错误日志独立存储 (Error 及以上级别)
-    logger.add(
+    _safe_add_file_sink(
         os.path.join(LOG_DIR, "app_error.log"),
         level="ERROR",
         rotation="100 MB",
         retention="60 days",
         encoding="utf-8",
-        enqueue=True,
-        backtrace=True,        # 记录完整的异常堆栈
-        diagnose=False          # 关闭变量诊断，防止敏感数据泄露到日志
+        backtrace=True,
+        diagnose=False,
     )
